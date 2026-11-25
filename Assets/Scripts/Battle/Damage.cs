@@ -15,9 +15,10 @@ namespace TextSlayers
     /// </summary>
     public static class Damage
     {
-        public static HitResult Compute(Combatant attacker, Combatant target, float coef, float bonusCrit, System.Random rng)
+        /// <param name="atkMul">공격력 배율 (버프). v0.1 전투는 기본값 1.</param>
+        public static HitResult Compute(Combatant attacker, Combatant target, float coef, float bonusCrit, System.Random rng, float atkMul = 1f)
         {
-            float raw = attacker.Stats.ATK * coef * GameData.DefBase / (GameData.DefBase + Mathf.Max(0, target.Stats.DEF));
+            float raw = attacker.Stats.ATK * atkMul * coef * GameData.DefBase / (GameData.DefBase + Mathf.Max(0, target.Stats.DEF));
 
             bool crit = rng.NextDouble() < Mathf.Clamp01(attacker.Stats.CRIT + bonusCrit);
             if (crit) raw *= attacker.Stats.CRITDMG;
@@ -28,6 +29,12 @@ namespace TextSlayers
             if (guarded) raw *= GameData.GuardReduction;
 
             return new HitResult { Amount = Mathf.Max(1, Mathf.RoundToInt(raw)), Crit = crit, Guarded = guarded };
+        }
+
+        /// <summary>회복량 = ATK × 버프 × 계수 (v0.2). 피해와 같은 파일에서만 계산한다.</summary>
+        public static int Heal(Combatant caster, float coef, float atkMul = 1f)
+        {
+            return Mathf.Max(1, Mathf.RoundToInt(caster.Stats.ATK * atkMul * coef));
         }
     }
 }
