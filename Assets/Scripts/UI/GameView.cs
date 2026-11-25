@@ -27,7 +27,7 @@ namespace TextSlayers
         static readonly Color GaugeColor = new Color(0.95f, 0.75f, 0.2f);
         static readonly Color ExpColor = new Color(0.4f, 0.8f, 0.4f);
 
-        static GUIStyle label, center, title, logStyle, button, barText;
+        static GUIStyle label, center, title, logStyle, button, barText, small, smallButton;
         static Texture2D white;
         static Vector2 logScroll;
         static int lastLogVersion = -1;
@@ -56,6 +56,9 @@ namespace TextSlayers
                 case GameScreen.Character: DrawCharacter(g); break;
                 case GameScreen.Battle: DrawBattle(g); break;
                 case GameScreen.Result: DrawResult(g); break;
+                case GameScreen.FieldStageSelect: DrawFieldStageSelect(g); break;
+                case GameScreen.PartySelect: DrawPartySelect(g); break;
+                case GameScreen.FieldBattle: DrawFieldBattle(g); break;
             }
 
             DrawToast(g);
@@ -104,6 +107,11 @@ namespace TextSlayers
                 case GameScreen.Result:
                     if (IsConfirm(e.keyCode)) { g.Go(GameScreen.Lobby); e.Use(); }
                     break;
+
+                case GameScreen.FieldBattle:
+                    if (g.Field != null && g.Field.IsOver && IsConfirm(e.keyCode)) { g.FinishFieldBattle(); e.Use(); }
+                    else if (g.Field != null && g.Field.Stage.IsTest && DebugKey(g, e.keyCode)) e.Use();
+                    break;
             }
         }
 
@@ -137,6 +145,10 @@ namespace TextSlayers
 
             float y = 180;
             if (GUI.Button(MenuRect(y), "스테이지", button)) { resetArmed = false; g.Go(GameScreen.StageSelect); }
+            y += ButtonH + 12;
+            if (GUI.Button(MenuRect(y), "필드 전투 <size=16>(v0.2 테스트)</size>", button)) { resetArmed = false; g.Go(GameScreen.FieldStageSelect); }
+            y += ButtonH + 12;
+            if (GUI.Button(MenuRect(y), "<color=#ffd76a>디버그 맵</color>", button)) { resetArmed = false; g.EnterDebugMap(); }
             y += ButtonH + 12;
             if (GUI.Button(MenuRect(y), "캐릭터 정보", button)) { resetArmed = false; g.Go(GameScreen.Character); }
             y += ButtonH + 12;
@@ -267,6 +279,483 @@ namespace TextSlayers
             if (GUI.Button(MenuRect(vh - Pad - ButtonH - 40), "로비로 (Enter)", button)) g.Go(GameScreen.Lobby);
         }
 
+        // ───────────────────────── v0.2 필드 전투 ─────────────────────────
+        const float CardH = 72f;
+        const float CardMinW = 290f;
+        const float SideW = 380f;
+        const float FieldLogH = 190f;
+        const float TopBarH = 52f;
+
+        static readonly Color FieldBg = new Color(0.10f, 0.13f, 0.11f);
+        static readonly Color FieldLine = new Color(0.16f, 0.20f, 0.17f);
+        static readonly Color PlayerColor = new Color(0.30f, 0.55f, 0.95f);
+        static readonly Color EnemyColor = new Color(0.85f, 0.35f, 0.30f);
+        static readonly Color ImmortalColor = new Color(0.95f, 0.80f, 0.30f);
+        static readonly Color GuardColor = new Color(0.6f, 0.85f, 1f);
+
+        static Vector2 partyScroll;
+
+        static void DrawFieldStageSelect(GameRoot g)
+        {
+            Header("필드 전투 (v0.2)");
+            float y = 90;
+            float w = Mathf.Min(vw - Pad * 2, 760f);
+            float x = (vw - w) / 2;
+            foreach (var st in FieldData.Stages)
+            {
+                string tag = st.IsTest ? "  <color=#ffd76a>[테스트]</color>" : "";
+                if (GUI.Button(new Rect(x, y, w, ButtonH), $"{st.Name}{tag}", button)) g.ChooseFieldStage(st);
+                GUI.Label(new Rect(x + 8, y + ButtonH + 4, w - 16, 30), $"<color=#999999>{WaveSummary(st)}</color>", label);
+                y += ButtonH + 48;
+            }
+            BackButton(g);
+        }
+
+        /// <summary>웨이브 구성 요약 (예: "테스트 더미 1 ×4, 테스트 더미 2 ×3").</summary>
+        static string WaveSummary(FieldStageDef st)
+        {
+            var waves = new string[st.Waves.Length];
+            for (int i = 0; i < st.Waves.Length; i++)
+            {
+                var seen = new System.Collections.Generic.List<string>();
+                var counts = new System.Collections.Generic.List<string>();
+                foreach (var id in st.Waves[i])
+                {
+                    if (seen.Contains(id)) continue;
+                    seen.Add(id);
+                    int n = 0;
+                    foreach (var other in st.Waves[i]) if (other == id) n++;
+                    counts.Add($"{GameData.Enemy(id).Name} ×{n}");
+                }
+                waves[i] = string.Join(", ", counts);
+            }
+            return string.Join("  →  ", waves);
+        }
+
+        static void DrawPartySelect(GameRoot g)
+        {
+            var stage = g.PendingFieldStage;
+            if (stage == null) { g.Go(GameScreen.FieldStageSelect); return; }
+            var sel = g.SelectedParty;
+            Header($"출전 선택  {sel.Count}/{FieldConst.MaxPartySize}  —  {stage.Name}");
+
+            // 선택 순서 = 편성 순서
+            var names = new string[sel.Count];
+            for (int i = 0; i < sel.Count; i++) names[i] = $"{i + 1}. {FieldData.Character(sel[i]).Name}";
+            string order = sel.Count > 0 ? string.Join("   ", names) : "<color=#999999>캐릭터를 눌러 선택하세요</color>";
+            GUI.Label(new Rect(Pad, 70, vw - Pad * 2, 32), order, center);
+
+            // 캐릭터 목록 (스크롤, GUILayout 미사용)
+            float top = 110f;
+            float bottom = vh - Pad - ButtonH - Pad;
+            var view = new Rect(Pad, top, vw - Pad * 2, bottom - top);
+            float innerW = view.width - 20f;
+            int cols = Mathf.Max(2, Mathf.FloorToInt(innerW / CardMinW));
+            float gap = 8f;
+            float cw = (innerW - gap * (cols - 1)) / cols;
+            var roster = FieldData.Roster;
+            int rows = Mathf.CeilToInt(roster.Length / (float)cols);
+            var content = new Rect(0, 0, innerW, rows * (CardH + gap));
+
+            Fill(view, Panel);
+            partyScroll = GUI.BeginScrollView(view, partyScroll, content);
+            for (int i = 0; i < roster.Length; i++)
+            {
+                var c = roster[i];
+                int idx = sel.IndexOf(c.Id);
+                var r = new Rect((i % cols) * (cw + gap), (i / cols) * (CardH + gap), cw, CardH);
+                if (idx >= 0) Fill(new Rect(r.x - 2, r.y - 2, r.width + 4, r.height + 4), PlayerColor);
+                string mark = idx >= 0 ? $"<color=#8fd3ff>[{idx + 1}]</color> " : "";
+                string text = $"{mark}<b>{c.Name}</b>\n<size=15><color=#aaaaaa>{c.Kind} · {FieldData.RoleName(c.BaseRole)} · {FieldData.StrategyName(c.DefaultStrategy)}</color></size>";
+                if (GUI.Button(r, text, button)) g.ToggleParty(c.Id);
+            }
+            GUI.EndScrollView();
+
+            float by = vh - Pad - ButtonH;
+            float bw = (vw - Pad * 3) / 2;
+            if (GUI.Button(new Rect(Pad, by, bw, ButtonH), "뒤로", button)) g.Go(GameScreen.FieldStageSelect);
+            GUI.enabled = sel.Count > 0;
+            if (GUI.Button(new Rect(Pad * 2 + bw, by, bw, ButtonH), $"출전 ({sel.Count}명)", button)) g.StartFieldStage();
+            GUI.enabled = true;
+        }
+
+        static void DrawFieldBattle(GameRoot g)
+        {
+            var b = g.Field;
+            if (b == null) { g.Go(GameScreen.Lobby); return; }
+
+            // 상단 바
+            Fill(new Rect(0, 0, vw, TopBarH), Panel);
+            string wave = b.WaveCount > 1 ? $"  <color=#999999>웨이브 {b.WaveIndex + 1}/{b.WaveCount}</color>" : "";
+            GUI.Label(new Rect(Pad, 10, vw * 0.6f, 32), $"<b>{b.Stage.Name}</b>{wave}   <color=#aaaaaa>{b.Time:0.0}초</color>", label);
+
+            bool debug = b.Stage.IsTest;
+            if (debug && dbgTool != DebugTool.None)
+                GUI.Label(new Rect(vw * 0.35f, 10, vw * 0.3f, 32), $"<color=#ffd76a>{ToolHint(dbgTool)}</color>", center);
+            if (debug && g.FieldPaused)
+                GUI.Label(new Rect(vw * 0.35f, 30, vw * 0.3f, 24), "<color=#ff8f8f><size=16>일시정지</size></color>", center);
+
+            // 필드
+            float areaW = vw - Pad * 3 - SideW;
+            float areaH = vh - TopBarH - FieldLogH - Pad * 3 - (debug ? DebugBarH + Pad : 0f);
+            float unit = Mathf.Min(areaW / FieldConst.Width, areaH / FieldConst.Height);
+            var field = new Rect(Pad, TopBarH + Pad, FieldConst.Width * unit, FieldConst.Height * unit);
+            DrawField(field, unit, b);
+
+            // 오른쪽: 아군 피해 집계
+            var side = new Rect(vw - Pad - SideW, TopBarH + Pad, SideW, areaH);
+            DrawPartyPanel(side, b);
+
+            // 아래: (디버그 막대) + 로그. 버튼 · 클릭은 로그를 그린 뒤 (HandleKeys 주석 참고)
+            float logY = TopBarH + Pad * 2 + areaH;
+            float barY = logY;
+            if (debug) logY += DebugBarH + Pad;
+            DrawLog(new Rect(Pad, logY, vw - Pad * 2, vh - logY - Pad), g.Log);
+
+            if (debug)
+            {
+                DrawDebugBar(new Rect(Pad, barY, vw - Pad * 2, DebugBarH), g, b);
+                HandleFieldClick(field, unit, b);
+                if (GUI.Button(new Rect(vw - Pad - 120, 6, 120, 40), "나가기", button)) { dbgTool = DebugTool.None; g.ExitDebugMap(); return; }
+            }
+            else if (GUI.Button(new Rect(vw - Pad - 120, 6, 120, 40), b.IsOver ? "결과 보기" : "나가기", button)) { g.FinishFieldBattle(); return; }
+            if (!b.IsOver && GUI.Button(new Rect(vw - Pad * 2 - 240, 6, 120, 40), $"속도 ×{g.FieldSpeed:0}", button)) g.CycleFieldSpeed();
+        }
+
+        // ───────────────────────── 디버그 맵 도구 (사용자 2026-11-26) ─────────────────────────
+        // 배치 · 제거 도구를 고른 뒤 필드를 클릭한다. 단축키: 1 더미 1 · 2 더미 2 · 3 제거 · Esc 도구 해제 · P 일시정지
+        //                                              A 더미 AI · C 쿨타임 초기화 · R 집계 초기화
+        enum DebugTool { None, PlaceMelee, PlaceRanged, Remove }
+        const float DebugBarH = 44f;
+        const float RemovePickDist = 1.0f;      // 제거 도구: 클릭 지점에서 이 거리 안의 가장 가까운 적
+        const string DummyMelee = "test_dummy_melee";
+        const string DummyRanged = "test_dummy_ranged";
+        static DebugTool dbgTool;
+
+        static string ToolHint(DebugTool t) => t switch
+        {
+            DebugTool.PlaceMelee => "필드를 클릭해 더미 1 (근거리) 배치",
+            DebugTool.PlaceRanged => "필드를 클릭해 더미 2 (원거리) 배치",
+            DebugTool.Remove => "제거할 적을 클릭",
+            _ => "",
+        };
+
+        static void SelectTool(DebugTool t) => dbgTool = dbgTool == t ? DebugTool.None : t;
+
+        static void DrawDebugBar(Rect r, GameRoot g, FieldBattle b)
+        {
+            Fill(r, Panel);
+            string[] labels =
+            {
+                ToolLabel("더미 1 배치", DebugTool.PlaceMelee),
+                ToolLabel("더미 2 배치", DebugTool.PlaceRanged),
+                ToolLabel("제거", DebugTool.Remove),
+                "전부 제거",
+                "기본 배치",
+                b.EnemyAI ? "적 AI <color=#8fff9f>켜짐</color>" : "적 AI <color=#ff8f8f>꺼짐</color>",
+                g.FieldPaused ? "<color=#ff8f8f>재개</color>" : "일시정지",
+                "쿨타임 초기화",
+                "집계 초기화",
+            };
+            float gap = 6f;
+            float bw = (r.width - 12f - gap * (labels.Length - 1)) / labels.Length;
+            for (int i = 0; i < labels.Length; i++)
+            {
+                var br = new Rect(r.x + 6f + i * (bw + gap), r.y + 4f, bw, r.height - 8f);
+                if (!GUI.Button(br, labels[i], smallButton)) continue;
+                switch (i)
+                {
+                    case 0: SelectTool(DebugTool.PlaceMelee); break;
+                    case 1: SelectTool(DebugTool.PlaceRanged); break;
+                    case 2: SelectTool(DebugTool.Remove); break;
+                    case 3: b.DebugClearEnemies(); break;
+                    case 4: b.DebugResetEnemies(); break;
+                    case 5: b.EnemyAI = !b.EnemyAI; break;
+                    case 6: g.ToggleFieldPause(); break;
+                    case 7: b.DebugResetCooldowns(); break;
+                    case 8: b.DebugResetMeters(); break;
+                }
+            }
+        }
+
+        static string ToolLabel(string text, DebugTool t) => dbgTool == t ? $"<color=#ffd76a>[{text}]</color>" : text;
+
+        static void HandleFieldClick(Rect field, float unit, FieldBattle b)
+        {
+            Event e = Event.current;
+            if (dbgTool == DebugTool.None || e.type != EventType.MouseDown || !field.Contains(e.mousePosition)) return;
+            if (e.button == 1) { dbgTool = DebugTool.None; e.Use(); return; } // 오른쪽 클릭: 도구 해제
+
+            var pos = new Vector2((e.mousePosition.x - field.x) / unit, (e.mousePosition.y - field.y) / unit);
+            switch (dbgTool)
+            {
+                case DebugTool.PlaceMelee:
+                case DebugTool.PlaceRanged:
+                    if (!b.DebugSpawn(dbgTool == DebugTool.PlaceMelee ? DummyMelee : DummyRanged, pos))
+                        GameRoot.Instance?.ShowToast($"적은 최대 {FieldBattle.MaxDebugEnemies}명까지 배치할 수 있습니다.");
+                    break;
+                case DebugTool.Remove:
+                    b.DebugRemoveAt(pos, RemovePickDist);
+                    break;
+            }
+            e.Use();
+        }
+
+        static bool DebugKey(GameRoot g, KeyCode k)
+        {
+            var b = g.Field;
+            switch (k)
+            {
+                case KeyCode.Alpha1: case KeyCode.Keypad1: SelectTool(DebugTool.PlaceMelee); return true;
+                case KeyCode.Alpha2: case KeyCode.Keypad2: SelectTool(DebugTool.PlaceRanged); return true;
+                case KeyCode.Alpha3: case KeyCode.Keypad3: case KeyCode.Delete: SelectTool(DebugTool.Remove); return true;
+                case KeyCode.Escape: dbgTool = DebugTool.None; return true;
+                case KeyCode.P: g.ToggleFieldPause(); return true;
+                case KeyCode.A: b.EnemyAI = !b.EnemyAI; return true;
+                case KeyCode.C: b.DebugResetCooldowns(); return true;
+                case KeyCode.R: b.DebugResetMeters(); return true;
+            }
+            return false;
+        }
+
+        static void DrawField(Rect r, float unit, FieldBattle b)
+        {
+            Fill(r, FieldBg);
+            for (int i = 1; i < (int)FieldConst.Width; i++)
+                Fill(new Rect(r.x + i * unit, r.y, 1, r.height), FieldLine);
+            for (int i = 1; i < (int)FieldConst.Height; i++)
+                Fill(new Rect(r.x, r.y + i * unit, r.width, 1), FieldLine);
+
+            foreach (var u in b.Enemies) DrawUnit(r, unit, u);
+            foreach (var u in b.Players) DrawUnit(r, unit, u);
+            DrawEffects(r, unit, b);
+        }
+
+        // ───────────────────────── 스킬 이펙트 (v0.2) ─────────────────────────
+        // 이펙트 텍스처는 코드로 만든다 (외부 리소스 없음). 시간은 전투 시간(FieldBattle.Time)이라 배속을 따른다.
+        // 지속시간 · 크기 · 색은 전부 연출용 [임시] — 전투 결과에 영향 없음.
+        const float FxSpin = 0.35f, FxSmash = 0.45f, FxBurst = 0.3f, FxPulse = 0.55f, FxGrasp = 0.9f, FxHarvest = 0.8f;
+        const float FxGraspSpread = 0.35f;     // 손아귀: 어둠이 퍼지는 구간 비율 (이후 모인다)
+        const int FxHarvestParticles = 6;      // 거두기: 대상 1명당 파티클 수
+        const float FxHarvestStagger = 0.07f;  // 파티클 출발 간격 (비율)
+
+        static readonly Color FxDark = new Color(0.62f, 0.35f, 1f);
+        static readonly Color FxLight = new Color(0.92f, 0.85f, 1f);
+        static readonly Color FxCore = new Color(0.28f, 0.06f, 0.45f);
+
+        static Texture2D fxDisc, fxRing, fxArc;
+
+        static void EnsureFx()
+        {
+            if (fxDisc != null) return;
+            fxDisc = MakeFxTex(64, (r, a) => { float v = Mathf.Clamp01(1f - r); return v * v; });
+            fxRing = MakeFxTex(128, (r, a) => r > 1f ? 0f : Mathf.Exp(-Mathf.Pow((r - 0.86f) / 0.07f, 2f)));
+            fxArc = MakeFxTex(128, (r, a) =>
+            {
+                if (r > 1f) return 0f;
+                float band = Mathf.Exp(-Mathf.Pow((r - 0.78f) / 0.10f, 2f));
+                float deg = Mathf.Abs(a) * Mathf.Rad2Deg;
+                return band * Mathf.Clamp01(1f - (deg / 75f) * (deg / 75f));
+            });
+        }
+
+        /// <summary>흰색 + 알파 텍스처. alpha(r, angle): r 은 중심 0 ~ 가장자리 1, angle 은 +x 기준 라디안.</summary>
+        static Texture2D MakeFxTex(int size, System.Func<float, float, float> alpha)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear,
+                hideFlags = HideFlags.HideAndDontSave,
+            };
+            var px = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float u = (x + 0.5f) / size * 2f - 1f, v = (y + 0.5f) / size * 2f - 1f;
+                float r = Mathf.Sqrt(u * u + v * v);
+                px[y * size + x] = new Color(1f, 1f, 1f, alpha(r, Mathf.Atan2(v, u)));
+            }
+            tex.SetPixels(px);
+            tex.Apply();
+            return tex;
+        }
+
+        static float Ease(float t) => 1f - (1f - t) * (1f - t);
+
+        static void DrawFx(Texture2D tex, Vector2 center, float size, Color c, float alpha, float angleDeg = 0f)
+        {
+            if (size <= 0.5f || alpha <= 0.01f) return;
+            Matrix4x4 old = GUI.matrix;
+            if (angleDeg != 0f)
+            {
+                // 가상 좌표(확대 전) 기준으로 회전. GUIUtility.RotateAroundPivot 은 확대된 화면 좌표를 써서 쓰지 않는다.
+                Vector3 p = center;
+                GUI.matrix = old * Matrix4x4.TRS(p, Quaternion.Euler(0f, 0f, angleDeg), Vector3.one) * Matrix4x4.TRS(-p, Quaternion.identity, Vector3.one);
+            }
+            Color oldColor = GUI.color;
+            GUI.color = new Color(c.r, c.g, c.b, alpha);
+            GUI.DrawTexture(new Rect(center.x - size / 2f, center.y - size / 2f, size, size), tex, ScaleMode.StretchToFill, true);
+            GUI.color = oldColor;
+            GUI.matrix = old;
+        }
+
+        static float AngleOf(Vector2 dir) => Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+
+        static void DrawEffects(Rect field, float unit, FieldBattle b)
+        {
+            EnsureFx();
+            Vector2 P(Vector2 v) => new Vector2(field.x + v.x * unit, field.y + v.y * unit);
+
+            foreach (var e in b.Effects)
+            {
+                float age = b.Time - e.Start;
+                Vector2 c = P(e.Origin);
+                float R = e.Radius * unit;
+                switch (e.Kind)
+                {
+                    case FieldEffectKind.Spin:      // 회전베기: 원형 베기
+                    {
+                        float t = age / FxSpin;
+                        if (t >= 1f) break;
+                        float ang = AngleOf(e.Dir) + t * 360f;
+                        DrawFx(fxArc, c, R * 2.3f, FxLight, 1f - t, ang);
+                        DrawFx(fxArc, c, R * 2.3f, FxDark, 0.6f * (1f - t), ang - 45f);
+                        DrawFx(fxRing, c, R * 2.2f, FxDark, 0.35f * (1f - t));
+                        break;
+                    }
+                    case FieldEffectKind.Smash:     // 강격검: 원형 파괴
+                    case FieldEffectKind.Burst:     // 검기 적중
+                    {
+                        float dur = e.Kind == FieldEffectKind.Smash ? FxSmash : FxBurst;
+                        float t = age / dur;
+                        if (t >= 1f) break;
+                        float k = Ease(t);
+                        DrawFx(fxDisc, c, R * 2f * Mathf.Lerp(0.3f, 1.1f, k), FxCore, 0.85f * (1f - t) * (1f - t));
+                        DrawFx(fxDisc, c, R * 1.2f * Mathf.Lerp(0.3f, 1f, k), FxLight, 0.7f * (1f - t));
+                        DrawFx(fxRing, c, R * 2f * Mathf.Lerp(0.4f, 1.4f, k), FxDark, 1f - t);
+                        break;
+                    }
+                    case FieldEffectKind.Pulse:     // 어둠의 파동: 퍼지는 원
+                    {
+                        float t = age / FxPulse;
+                        if (t >= 1f) break;
+                        float size = R * 2.3f * Ease(t);
+                        DrawFx(fxDisc, c, size, FxCore, 0.3f * (1f - t));
+                        DrawFx(fxRing, c, size, FxDark, 1f - t);
+                        DrawFx(fxRing, c, size * 0.8f, FxLight, 0.5f * (1f - t));
+                        break;
+                    }
+                    case FieldEffectKind.Grasp:     // 어둠의 손아귀: 퍼진 어둠이 한곳으로 모임
+                    {
+                        float t = age / FxGrasp;
+                        if (t >= 1f) break;
+                        if (t < FxGraspSpread)
+                        {
+                            float a = Ease(t / FxGraspSpread);
+                            DrawFx(fxDisc, c, R * 2.2f * a, FxCore, 0.45f);
+                            DrawFx(fxRing, c, R * 2.3f * a, FxDark, 0.6f * a);
+                        }
+                        else
+                        {
+                            float g = (t - FxGraspSpread) / (1f - FxGraspSpread);
+                            float s = 1f - Ease(g);
+                            Vector2 to = e.Source != null && e.Source.Alive ? P(e.Source.Pos) : c;
+                            Vector2 mid = Vector2.Lerp(to, c, s);
+                            DrawFx(fxDisc, mid, R * 2.2f * s, FxCore, 0.45f * s + 0.1f);
+                            DrawFx(fxRing, mid, R * 2.3f * s, FxDark, 0.9f);
+                            DrawFx(fxRing, mid, R * 1.6f * s, FxLight, 0.5f);
+                        }
+                        break;
+                    }
+                    case FieldEffectKind.Harvest:   // 어둠 거두기: 대상들에게서 파티클이 끌려옴
+                    {
+                        float t = age / FxHarvest;
+                        if (t >= 1f || e.Points == null) break;
+                        Vector2 dest = e.Source != null && e.Source.Alive ? P(e.Source.Pos) : c;
+                        foreach (var pt in e.Points)
+                        {
+                            Vector2 start = P(pt);
+                            DrawFx(fxDisc, start, unit * 0.9f, FxDark, 0.6f * (1f - t));
+                            Vector2 d = dest - start;
+                            Vector2 perp = d.sqrMagnitude > 0.01f ? new Vector2(-d.y, d.x).normalized : Vector2.zero;
+                            for (int k = 0; k < FxHarvestParticles; k++)
+                            {
+                                float s = Mathf.Clamp01((t - k * FxHarvestStagger) / (1f - FxHarvestParticles * FxHarvestStagger));
+                                if (s <= 0f || s >= 1f) continue;
+                                float side = (k % 2 == 0 ? 1f : -1f) * (0.3f + 0.12f * k) * unit;
+                                Vector2 pos = Vector2.Lerp(start, dest, s * s) + perp * (Mathf.Sin(s * Mathf.PI) * side);
+                                DrawFx(fxDisc, pos, unit * 0.32f, FxLight, 0.95f);
+                                DrawFx(fxDisc, pos, unit * 0.6f, FxDark, 0.4f);
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // 어둠의 검기: 일직선으로 날아가는 아치
+            foreach (var p in b.Projectiles)
+            {
+                float ang = AngleOf(p.Dir);
+                for (int i = 3; i >= 1; i--)
+                    DrawFx(fxArc, P(p.Pos - p.Dir * (0.35f * i)), unit * 1.5f, FxDark, 0.45f / i, ang);
+                DrawFx(fxArc, P(p.Pos), unit * 1.6f, FxLight, 0.95f, ang);
+            }
+        }
+
+        static void DrawUnit(Rect field, float unit, FieldUnit u)
+        {
+            if (!u.Alive) return;
+            float d = FieldConst.Radius * 2f * unit;
+            float cx = field.x + u.Pos.x * unit, cy = field.y + u.Pos.y * unit;
+            var body = new Rect(cx - d / 2, cy - d / 2, d, d);
+            if (u.C.Guarding) Fill(new Rect(body.x - 3, body.y - 3, body.width + 6, body.height + 6), GuardColor);
+            Fill(body, u.IsPlayer ? PlayerColor : EnemyColor);
+            GUI.Label(body, ShortName(u), small);
+
+            var bar = new Rect(body.x, body.yMax + 2, d, 5);
+            Fill(bar, BarBack);
+            Fill(new Rect(bar.x, bar.y, bar.width * (u.Immortal ? 1f : u.HpRatio), bar.height), u.Immortal ? ImmortalColor : HpColor);
+        }
+
+        /// <summary>필드 위 표시 이름: 아군은 앞 두 글자, 더미는 번호 (1 근거리 · 2 원거리).</summary>
+        static string ShortName(FieldUnit u)
+        {
+            string n = u.Name;
+            if (!u.IsPlayer && n.StartsWith("테스트 더미")) return "D" + n.Substring(n.Length - 1);
+            return n.Length <= 2 ? n : n.Substring(0, 2);
+        }
+
+        static void DrawPartyPanel(Rect r, FieldBattle b)
+        {
+            Fill(r, Panel);
+            float x = r.x + 10, w = r.width - 20, y = r.y + 8;
+            float t = b.MeterTime;
+            int total = 0;
+            foreach (var u in b.Players) total += u.DamageDealt;
+            GUI.Label(new Rect(x, y, w, 30), $"<b>아군</b>  <color=#aaaaaa>총 피해 {total} · 초당 {total / t:0.0}</color>", label);
+            y += 34;
+
+            foreach (var u in b.Players)
+            {
+                if (y + 56 > r.yMax) break;
+                string dead = u.Alive ? "" : " <color=#ff8f8f>(쓰러짐)</color>";
+                GUI.Label(new Rect(x, y, w, 26),
+                    $"{u.Name}{dead} <size=15><color=#aaaaaa>{FieldData.RoleName(u.Role)} · {FieldData.StrategyName(u.Strategy)}</color></size>", label);
+                y += 26;
+                DrawBar(new Rect(x, y, w * 0.45f, 20), u.HpRatio, HpColor, $"{u.C.Hp}/{u.C.Stats.HP}");
+                GUI.Label(new Rect(x + w * 0.45f + 8, y - 4, w * 0.55f - 8, 26),
+                    $"<size=16>피해 {u.DamageDealt} · 초당 {u.DamageDealt / t:0.0}</size>", label);
+                y += 30;
+            }
+
+            int taken = 0;
+            foreach (var e in b.Enemies) taken += e.DamageTaken;
+            if (y + 30 <= r.yMax)
+                GUI.Label(new Rect(x, y + 4, w, 30), $"<b>적</b> <color=#aaaaaa>{b.Enemies.Count}명 · 받은 피해 {taken}</color>", label);
+        }
+
         // ───────────────────────── 부품 ─────────────────────────
 
         static void DrawCombatant(Rect area, Combatant c, string nameText, bool showMp)
@@ -384,6 +873,10 @@ namespace TextSlayers
             title = new GUIStyle(center) { fontSize = TitleFontSize, fontStyle = FontStyle.Bold };
 
             logStyle = new GUIStyle(label) { fontSize = LogFontSize, margin = new RectOffset(0, 0, 2, 2) };
+
+            small = new GUIStyle(center) { fontSize = 14, wordWrap = false };
+            smallButton = new GUIStyle(button) { fontSize = 16, wordWrap = false };
+            small.normal.textColor = Color.white;
 
             barText = new GUIStyle(center) { fontSize = 16, wordWrap = false };
             barText.normal.textColor = Color.white;

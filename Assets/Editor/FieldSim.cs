@@ -36,6 +36,7 @@ namespace TextSlayers.EditorTools
             var sb = new StringBuilder("[TextSlayers] 필드 전투 시뮬레이션\n");
             foreach (var stage in FieldData.Stages)
             {
+                if (stage.IsTest) continue; // 테스트 맵은 끝나지 않으므로 제외
                 foreach (int lv in Levels)
                 {
                     foreach (var cs in cases)
@@ -74,6 +75,40 @@ namespace TextSlayers.EditorTools
                     }
                 }
             }
+            Debug.Log(sb.ToString());
+            TestMapCheck();
+        }
+
+        const float TestMapSeconds = 60f;
+
+        /// <summary>
+        /// 테스트 맵 점검: 기본 5명으로 60초 진행. 더미가 쓰러지지 않는지, 아군이 피해를 받지 않는지,
+        /// 전투가 끝나지 않는지(나가기로만 종료) 확인하고 캐릭터별 피해를 출력한다.
+        /// </summary>
+        [MenuItem("TextSlayers/테스트 맵 점검")]
+        public static void TestMapCheck()
+        {
+            FieldStageDef stage = null;
+            foreach (var s in FieldData.Stages) if (s.IsTest) stage = s;
+            if (stage == null) { Debug.LogError("[TextSlayers] 테스트 맵 없음"); return; }
+
+            var ids = new[] { "stium", "ern", "mel", "vendetta", "paracelsus" };
+            var party = new PartySlot[ids.Length];
+            for (int i = 0; i < ids.Length; i++) party[i] = FieldData.DefaultSlot(ids[i]);
+            var b = new FieldBattle(stage, party, 1, 7, recordEvents: true);
+            int steps = Mathf.CeilToInt(TestMapSeconds / FieldConst.Dt);
+            for (int i = 0; i < steps; i++) b.Step();
+
+            int deadDummies = 0, playerTaken = 0;
+            foreach (var e in b.Enemies) if (!e.Alive) deadDummies++;
+            foreach (var u in b.Players) playerTaken += u.DamageTaken;
+
+            var sb = new StringBuilder($"[TextSlayers] 테스트 맵 점검 ({TestMapSeconds:0}초, Lv.1, 이벤트 {b.Events.Count}개)\n");
+            sb.AppendLine($"상태 {b.Phase}  끝남 {b.IsOver}  더미 {b.Enemies.Count}명 중 쓰러짐 {deadDummies}  아군이 받은 피해 {playerTaken}");
+            foreach (var u in b.Players)
+                sb.AppendLine($"  {u.Name}: 피해 {u.DamageDealt} (초당 {u.DamageDealt / b.Time:0.0})  위치 ({u.Pos.x:0.0}, {u.Pos.y:0.0})");
+            bool ok = !b.IsOver && deadDummies == 0 && playerTaken == 0;
+            sb.AppendLine(ok ? "결과: 정상" : "결과: 이상 — 위 수치 확인");
             Debug.Log(sb.ToString());
         }
 

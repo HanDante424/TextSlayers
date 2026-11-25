@@ -28,6 +28,31 @@ namespace TextSlayers
             bool guarded = target.Guarding;
             if (guarded) raw *= GameData.GuardReduction;
 
+            // 공격력 0 (테스트 더미 등) 은 피해 0. 그 외에는 최소 1.
+            int amount = attacker.Stats.ATK * atkMul * coef <= 0f ? 0 : Mathf.Max(1, Mathf.RoundToInt(raw));
+            return new HitResult { Amount = amount, Crit = crit, Guarded = guarded };
+        }
+
+        /// <summary>
+        /// v0.2 스킬 피해 (스킬 문서 4장): 물리 = 공격력 × 계수 × (1 − 방어력/100),
+        /// 마법 = (기본 피해량 + 마력 × 계수) × (1 − 저항력/100). 합에 배율 → 치명타 → ±난수 → 방어 감소.
+        /// 배율이 0 이면 (수치 미정 캐릭터) 피해 0. `[해석]` 치명타 · 난수는 합 전체에 적용.
+        /// </summary>
+        public static HitResult ComputeSkill(Combatant attacker, Combatant target, float atkCoef, float magicBase,
+                                             float magicCoef, System.Random rng, float mul = 1f)
+        {
+            float phys = attacker.Stats.ATK * atkCoef * (1f - Mathf.Clamp(target.Stats.DEF, 0, 100) / 100f);
+            float magic = (magicBase + attacker.Stats.MAG * magicCoef) * (1f - Mathf.Clamp(target.Stats.RES, 0, 100) / 100f);
+            float raw = (phys + magic) * mul;
+            if (raw <= 0f) return new HitResult { Amount = 0 };
+
+            bool crit = rng.NextDouble() < Mathf.Clamp01(attacker.Stats.CRIT);
+            if (crit) raw *= attacker.Stats.CRITDMG;
+            raw *= 1f + (float)(rng.NextDouble() * 2.0 - 1.0) * GameData.DamageVariance;
+
+            bool guarded = target.Guarding;
+            if (guarded) raw *= GameData.GuardReduction;
+
             return new HitResult { Amount = Mathf.Max(1, Mathf.RoundToInt(raw)), Crit = crit, Guarded = guarded };
         }
 

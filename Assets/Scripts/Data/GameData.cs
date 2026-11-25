@@ -103,6 +103,12 @@ namespace TextSlayers
                 Exp = 9, Gold = 6, AppearText = "나무 위에서 고블린 궁수가 활을 겨눈다." },
             new EnemyDef { Id = "hobgoblin", Name = "홉 고블린", Stats = new Stats(120, 0, 10, 5, 8f, 0.05f, 1.5f),
                 Exp = 40, Gold = 30, IsBoss = true, AppearText = "땅이 울린다. 홉 고블린이 몽둥이를 끌며 다가온다!" },
+
+            // 테스트 맵 전용 (v0.2 구조 확인, 사용자 2026-11-26). 공격력 0, 체력 무한(FieldEnemyDef.Immortal). 보상 없음.
+            new EnemyDef { Id = "test_dummy_melee", Name = "테스트 더미 1", Stats = new Stats(1000, 0, 0, 0, 9f, 0f, 1.5f),
+                Exp = 0, Gold = 0, AppearText = "근거리 테스트 더미." },
+            new EnemyDef { Id = "test_dummy_ranged", Name = "테스트 더미 2", Stats = new Stats(1000, 0, 0, 0, 9f, 0f, 1.5f),
+                Exp = 0, Gold = 0, AppearText = "원거리 테스트 더미." },
         };
 
         static Dictionary<string, EnemyDef> enemyById;
