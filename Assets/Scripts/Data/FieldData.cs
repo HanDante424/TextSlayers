@@ -7,10 +7,42 @@ namespace TextSlayers
 
     public enum SkillTag { Attack, Defense, Heal, Support }                       // 스킬 · 패시브의 역할 태그
     public enum Role { Tank, Dealer, Healer, Supporter }                          // 역할군 (표기용, 효과 없음)
-    public enum Strategy { Hold, Charge, Flank, Kite, Escort }                    // 전략방식 (움직임 AI)
+    public enum Strategy { Hold, Charge, Flank, Kite, Escort, Backline }          // 전략방식 (움직임 AI). Backline = 후방 우선 공격
+
+    /// <summary>기본 공격 모양 (사용자 2026-11-26). 근거리는 휘두르기 이펙트, 원거리는 투사체.</summary>
+    public enum BasicKind { Sword, GreatSword, Halberd, Katana, Fist, Claw, Cross, FireSword, DarkSword, Glutton, IceShard, Pistol, Potion, DarkOrb,
+                            HSlash, Bolt, None }   // HSlash = 횡베기 (근접 더미), Bolt = 파티클 탄 (원거리 더미), None = 이펙트 없음
+
+    /// <summary>캐릭터 파티클 테마 (스킬 · 기본 공격 이펙트에 섞이는 입자).</summary>
+    public enum FxTheme { None, Fire, Dark, Moon, Holy, Ice, Frost, Spirit, Potion, Talisman, Gold, Steel, Black, Shadow, Gray }
     public enum SkillEffect { Damage, Guard, Taunt, Heal, AtkBuff,
                               Spin, Smash, DarkWave, Pulse, Grasp, Harvest }   // 뒤 6개: 스티움 고유 (v0.2 스킬 문서)
     public enum TargetRule { Enemy, EnemyArea, Ally, AllyAll, Self }
+
+    // ── 컨셉 스킬 공통 실행 (ConceptSkills.cs). Shape 가 None 이 아니면 FieldBattle.UseGeneric 이 처리 ──
+    public enum SkillShape
+    {
+        None,          // 예전 방식 (SkillEffect 로 처리)
+        Around,        // 자신 주변 (Radius)
+        Target,        // 대상 1명
+        TargetArea,    // 대상 위치 주변 (Radius)
+        Projectile,    // 날아가 처음 닿은 적 (Pierce 면 관통)
+        Pierce,        // 즉시 일직선 관통 (Range, 폭 = Radius)
+        Cone,          // 전방 부채꼴 (Radius, Angle)
+        Dash,          // 대상에게 돌진 (Pierce 면 경로 피해, Radius 면 도착 범위)
+        Leap,          // 대상에게 도약 (Radius 면 착지 범위)
+        AllEnemies,    // 모든 적
+        GrabSlam,      // 글러트니 에피타이저: 잡은 대상을 주변 랜덤 위치에 내려찍는다
+        RandomEnemies, // 무작위 적 Shots 번
+        AllyLowest,    // 체력 비율이 가장 낮은 아군 (AlsoSelf 면 자신도)
+        AllyAll,       // 아군 전체
+        Self,          // 자신
+        Zone,          // 장판 (대상 위치 또는 ZoneAtSelf)
+        Wall,          // 아군과 적 사이에 벽
+    }
+
+    public enum TargetPick { Current, Farthest, LowestHp, HighestMaxHp, HighestAtk, HighestMag, HighestHp, Marked }
+    public enum ShotStyle { Arc, Orb, Bullet, Arrow, Card, Shard, Potion, Spark }
 
     public sealed class FieldSkillDef
     {
@@ -35,6 +67,70 @@ namespace TextSlayers
         /// <summary>사용자가 수치를 확정한 스킬. false 면 쿨타임은 FieldConst.UndecidedCooldown (사용자 2026-11-26).</summary>
         public bool Decided;
         public float EffectiveCooldown => Decided ? Cooldown : FieldConst.UndecidedCooldown;
+
+        // ── 컨셉 스킬 (모양 · 대상 · 효과 · 이펙트). 크기 · 시간은 [임시] ──
+        public SkillShape Shape;
+        public TargetPick Pick;
+        public FieldEffectKind Fx;          // 주 이펙트
+        public FieldEffectKind Fx2;         // 보조 이펙트 (적중 · 도착 지점)
+        public float FxDelay2;              // 보조 이펙트 지연 (초)
+        public float FxTime;                // 지속형 이펙트 시간 (보호막 · 장판 · 벽 · 십자가 · 심판 준비)
+        public Color FxColor = Color.white;
+        public ShotStyle Shot;
+        public int Shots = 1;               // 투사체 수 · 무작위 타격 수
+        public bool Pierce;
+        public float ExplodeRadius;         // 투사체 적중 시 폭발 범위
+        public float Angle = 120f;          // 부채꼴 각도
+        public float Knock;                 // + 밀쳐내기 / - 끌어당기기 (유닛)
+        public bool PullToSelf;             // 시전자 앞까지 끌어온다
+        public float Stun;                  // 기절 (초)
+        public bool Roll;                   // "A ~ B" (멜): 기절 · 대상 수 · 범위를 매번 무작위
+        public float Root;                  // 시전자 이동 불가 (초)
+        public bool Marks;                  // 표식 (펜리르, 1개만)
+        public bool NeedsAllyStatus;        // 상태이상 걸린 아군이 있을 때만
+        public bool AlsoSelf;               // 아군 대상 스킬이 자신에게도
+        public bool ResetShortestCd;        // 남은 쿨타임이 가장 짧은 다른 스킬 초기화
+        public bool DashReturn;             // 돌진 후 제자리로 복귀
+        public bool DashBehind;             // 대상 뒤까지 돌진
+        public bool ZoneAtSelf;
+        public string FollowUp;             // 이어서 자동으로 나가는 스킬 ID
+        public float FollowDelay;
+        public bool Quiet;                  // 로그에 남기지 않는 보조 스킬 (FollowUp)
+        public bool Pistol;                 // 총잡이 특수탄: 장전 중 사용 불가
+        public bool CollideStun;            // 밀려난 적이 적 · 벽에 부딪히면 작은 파동 + 기절
+        public bool Fx2AtFront;             // 보조 이펙트를 시전자 앞에 (천멸승화각 불기둥)
+        public bool CrossLaser;             // 십자가 폭발이 맵 전체를 꿰뚫는 레이저 (역십자가)
+        public bool WolvesOnly;             // 아군 늑대만 (몰이 사냥)
+        public float Hunt;                  // 늑대가 표식 대상을 우선하는 시간
+        public string CounterSkill;         // 자세 중 피격 시 나가는 반격 (카운터 슬래시)
+        public string Next;                 // 사용 후 이 스킬로 바뀜 (요월 암영 번갈아)
+        public string FireArmVariant;       // 화염의 팔 보유 시 대신 나가는 스킬 (폭멸파쇄권 → 화권)
+        public bool Erosion;                // 장착 중: 피해를 줄 때 어둠 잠식 부여 (어둠 거두기)
+        public int KnockLevel;              // 적중 넉백 단계 1~5 (0 = 없음, 사용자 2026-11-26)
+        public bool KnockSkipPrimary;       // 주대상은 넉백 제외 (나머지만). 방향은 주대상에서 바깥쪽
+        public int KnockLevelOthers;        // 0 이 아니면 주대상 외에는 이 단계 (화권 화염 파도)
+        public bool Channel;                // 후속 스킬까지 준비 동작 (그동안 다른 행동 안 함)
+        // 동작 세부 (ConceptCombat.cs)
+        public bool Armor;                  // 사용 중 슈퍼아머: 넉백 · 끌어당김 안 됨. 기절은 통하고 시전을 끊는다
+        public float Lunge;                 // 앞으로 살짝 이동한 뒤 발동 (거리)
+        public float Approach;              // 이 거리 안의 대상에게 돌진한 뒤 발동
+        public float CastTime;              // 발동 전 대기 · 시전 시간
+        public bool Aim;                    // 시전 중 조준선 이펙트
+        public float Creep;                 // 발동 후 이 시간 동안 대상에게 천천히 이동
+        public float ToughUp, ToughUpLowHp; // 자신 강인함 증가 (5초)
+        public float ToughDown;             // 대상 강인함 감소 (5초)
+        public float SelfDamagePct;         // 사용 후 자신의 최대 체력 비례 피해 (체력 1 까지만)
+        public FieldEffectKind CastFx;      // 시전(대기) 중에 보이는 이펙트
+        public float Launch;                // 적중한 적을 잠깐 띄우는 시간
+        public float HangTime;              // 도약: 공중에 머무는 시간 (높이 뜬다)
+        public float OffMapTime;            // 맵에서 이탈하는 시간 (도약: 사라졌다가 대상 위치에 낙하)
+        public bool HideWhileUsing;         // 사용 중 맵 이탈 (멸령부)
+        public float BarrageTime;           // 이 시간 동안 Hits 번 나눠 때린다
+        public bool BarrageCone;            // 연타가 전방 부채꼴 전체를 때린다
+        public bool Combo;                  // 파이어 블레이드: 큰 베기 → 대상마다 연속 베기 → 각자 폭발
+        public bool NoDamage;               // 피해 없이 효과만 (심판의 일격 제압)
+        public bool ImpactCone;             // 도착 지점에 부채꼴 충격파
+        public float ImpactFrame;           // 적중 순간 필드 정지 + 색 반전 (초, 실제 시간)
     }
 
     public sealed class FieldPassiveDef
@@ -63,6 +159,21 @@ namespace TextSlayers
         public string Passive;             // 패시브 1
         /// <summary>수치가 정해진 캐릭터. false 면 주는 피해가 전부 0 (사용자 2026-11-26).</summary>
         public bool NumbersSet;
+        /// <summary>출전 가능. 스킬 컨셉이 있는 캐릭터만 (사용자 2026-11-26).</summary>
+        public bool Enabled;
+
+        // ── 컨셉 연출 · 규칙 (ConceptCharacters.cs 가 채운다) ──
+        public BasicKind Basic;
+        public Color BasicColor = Color.white;
+        public int BasicKnock = FieldConst.MeleeBasicKnockLevel;   // 기본 공격 넉백 단계 (캐릭터별, ConceptCharacters)
+        public FxTheme Theme;
+        public string[] Passives = new string[0];   // 고유 패시브 3 (장착 1)
+        public bool Gunner;                         // 총잡이: 기본탄 장탄 · 장전
+        public bool Wolf;                           // 늑대 태그
+        public bool Eclipse;                        // 이클립스 소속 (악신의 눈 재단)
+        public bool FireArmTrait;                   // 화염의 팔 특성 (점화)
+        public bool ShowWeapons;                    // 무기 상시 표시 (벤데타 권총 · 케이스)
+        public bool IsRangedBasic => FieldData.IsRangedBasic(Basic);
     }
 
     public sealed class FieldEnemyDef
@@ -73,6 +184,9 @@ namespace TextSlayers
         public float Range;
         public string[] Skills = new string[0];
         public bool Immortal;              // 체력 무한 (테스트 더미). 피해는 기록하지만 HP 가 줄지 않는다.
+        public BasicKind Basic = BasicKind.None;   // 기본 공격 이펙트 (None 이면 이펙트 없음)
+        public Color BasicColor = Color.white;
+        public int BasicKnock = -1;                // 기본 공격 넉백 단계 (-1 = 근거리 1 · 원거리 0 기본값)
     }
 
     public sealed class FieldStageDef
@@ -120,7 +234,26 @@ namespace TextSlayers
         public const int MaxPartySize = 5;
         public const float UndecidedCooldown = 10f;    // 수치 미정 스킬의 쿨타임 (사용자 2026-11-26)
         public const float ProjectileSpeed = 10f;      // 투사체 속도 (유닛/초) [임시]
-        public const float ProjectileHitRadius = 0.6f; // 투사체 판정 반지름 [임시]             // 테스트 단계 출전 인원 (사용자 2026-11-26). 기획 최대 7 은 추후
+        public const float ProjectileHitRadius = 0.6f; // 투사체 판정 반지름 [임시]
+        public const float DashSpeed = 18f;            // 돌진 · 도약 속도 (유닛/초) [임시]
+        public const float DashStopDist = 1f;          // 대상 앞 이 거리에서 멈춤
+        public const float PushTime = 0.25f;            // 밀쳐내기 · 끌어당기기에 걸리는 시간
+
+        /// <summary>넉백 단계 1~5 (사용자 2026-11-26). 단계별 밀려나는 거리(유닛)는 [임시]. 0 = 넉백 없음.</summary>
+        public static readonly float[] KnockDistance = { 0f, 0.5f, 1.0f, 1.6f, 2.4f, 3.2f };
+        /// <summary>넉백 뒤 경직(초): 밀려난 다음 이만큼 더 이동 불가, 공격은 가능 [임시].</summary>
+        public static readonly float[] KnockStagger = { 0f, 0f, 0.1f, 0.2f, 0.35f, 0.5f };
+        public const float StaggerImmuneTime = 0.5f;   // 경직이 끝난 뒤 이 시간 동안은 다시 경직되지 않는다 (밀리기만)
+        public const int ShakeKnockLevel = 4;          // 이 단계 이상이면 화면 흔들림
+        public const int MaxKnockLevel = 5;
+        // 기본 공격 넉백 기본값 (캐릭터별 값이 없을 때: 더미 · 일반 적). 캐릭터별 값은 ConceptCharacters (사용자 2026-11-26)
+        public const int MeleeBasicKnockLevel = 1;
+        public const int RangedBasicKnockLevel = 0;
+        public static float KnockOf(int level) => KnockDistance[Mathf.Clamp(level, 0, MaxKnockLevel)];
+        public const float ShotInterval = 0.15f;       // 여러 발 투사체 간격
+        public const float PierceWidth = 0.7f;         // 일직선 판정 폭 (Radius 가 0 일 때)
+        public const float LobTime = 0.35f;            // 포션 투척 비행 시간 (이펙트)
+        public const float WallDist = 2.5f;            // 수은 장벽: 시전자 앞 거리             // 테스트 단계 출전 인원 (사용자 2026-11-26). 기획 최대 7 은 추후
     }
 
     /// <summary>필드 전투 데이터 표. 기준 문서: Docs/Design/TextSlayers_Concept_v0.2.md</summary>
@@ -155,24 +288,25 @@ namespace TextSlayers
 
             // ── 스티움 카터렉 (스킬 문서 4장, 기본 상태만. 어둠 각성 · 밀쳐내기 · 끌어당기기 · 기절은 미구현) ──
             // 피해 · 쿨타임은 사용자 확정값. 범위 · 사거리는 미정이라 [임시].
-            new FieldSkillDef { Id = "stium_spin", Name = "회전베기", Tag = SkillTag.Attack, Effect = SkillEffect.Spin,
+            new FieldSkillDef { Id = "stium_spin", KnockLevel = 3, Name = "회전베기", Tag = SkillTag.Attack, Effect = SkillEffect.Spin, FxColor = SkillColor.Dark,
                 Target = TargetRule.EnemyArea, Radius = 2f, Cooldown = 6f, Coef = 1.0f, MagicBase = 80f, MagicCoef = 0.5f,
                 Decided = true, Desc = "전방위: 공격력 100% 물리 + (80 + 마력 50%) 마법" },
-            new FieldSkillDef { Id = "stium_smash", Name = "강격검", Tag = SkillTag.Attack, Effect = SkillEffect.Smash,
+            new FieldSkillDef { Id = "stium_smash", KnockLevel = 3, Name = "강격검", Tag = SkillTag.Attack, Effect = SkillEffect.Smash, FxColor = SkillColor.Dark,
                 Target = TargetRule.Enemy, Range = 1.8f, Radius = 1.2f, Cooldown = 12f, Coef = 1.5f, MagicBase = 90f, MagicCoef = 0.6f,
                 Decided = true, Desc = "대상: 공격력 150% 물리 + (90 + 마력 60%) 마법" },
-            new FieldSkillDef { Id = "stium_darkwave", Name = "어둠의 검기", Tag = SkillTag.Attack, Effect = SkillEffect.DarkWave,
+            new FieldSkillDef { Id = "stium_darkwave", KnockLevel = 1, Name = "어둠의 검기", Tag = SkillTag.Attack, Effect = SkillEffect.DarkWave, FxColor = SkillColor.Dark,
                 Target = TargetRule.Enemy, Range = 8f, Cooldown = 10f, MagicBase = 60f, MagicCoef = 0.75f,
                 Decided = true, Desc = "검기가 처음 적중한 적에게 (60 + 마력 75%) 마법" },
-            new FieldSkillDef { Id = "stium_pulse", Name = "어둠의 파동", Tag = SkillTag.Attack, Effect = SkillEffect.Pulse,
+            new FieldSkillDef { Id = "stium_pulse", KnockLevel = 4, Name = "어둠의 파동", Tag = SkillTag.Attack, Effect = SkillEffect.Pulse, FxColor = SkillColor.Dark,
                 Target = TargetRule.EnemyArea, Radius = 2.5f, Cooldown = 11f, MagicBase = 80f, MagicCoef = 0.6f,
-                Decided = true, Desc = "근처: (80 + 마력 60%) 마법 (밀쳐내기 미구현)" },
-            new FieldSkillDef { Id = "stium_grasp", Name = "어둠의 손아귀", Tag = SkillTag.Attack, Effect = SkillEffect.Grasp,
+                Decided = true, Desc = "근처: (80 + 마력 60%) 마법 (넉백 4)" },
+            new FieldSkillDef { Id = "stium_grasp", Name = "어둠의 손아귀", Tag = SkillTag.Attack, Effect = SkillEffect.Grasp, FxColor = SkillColor.Dark,
                 Target = TargetRule.EnemyArea, Radius = 4f, Cooldown = 10f,
-                Desc = "어둠을 퍼트린 뒤 끌어당김 (수치 · 끌어당기기 미정)" },
-            new FieldSkillDef { Id = "stium_harvest", Name = "어둠 거두기", Tag = SkillTag.Attack, Effect = SkillEffect.Harvest,
-                Target = TargetRule.EnemyArea, Radius = 6f, Cooldown = 10f,
-                Desc = "어둠 잠식 소모 (잠식 · 수치 미구현)" },
+                Shape = SkillShape.Around, Fx = FieldEffectKind.Grasp, FollowUp = "stium_grasp_pull", FollowDelay = 0.35f,
+                Desc = "어둠을 퍼트린 뒤 중간 범위(반지름 4, 임시)를 끌어당김 (수치 미정)" },
+            new FieldSkillDef { Id = "stium_harvest", Name = "어둠 거두기", Tag = SkillTag.Attack, Effect = SkillEffect.Harvest, FxColor = SkillColor.Dark,
+                Target = TargetRule.EnemyArea, Radius = 6f, Cooldown = 10f, Erosion = true,
+                Desc = "장착 중 피해 시 어둠 잠식 1 (최대 10, 저항력 -1). 사용 시 잠식 있는 적만: 잠식 1당 최대 체력 1% 고정 피해, 피해의 50% 회복" },
         };
 
         // ── 패시브 [임시] ──
@@ -184,6 +318,8 @@ namespace TextSlayers
             new FieldPassiveDef { Id = "swift", Name = "질주", Tag = SkillTag.Support, MovMul = 1.15f, Desc = "MOV +15%" },
         };
 
+        static FieldData() => ConceptCharacters.Apply(Roster);
+
         // ── 캐릭터 [임시] ──  이름 · 유형 · 역할은 사용자 확정, 스탯 · 스킬 구성은 자리 표시
         public static readonly CharacterDef[] Roster =
         {
@@ -192,36 +328,40 @@ namespace TextSlayers
             new CharacterDef { Id = "stium", Name = "스티움 카터렉", Kind = "근거리 딜탱, 탱커", BaseRole = Role.Tank,
                 DefaultStrategy = Strategy.Charge, Base = new Stats(1500, 0, 30, 0, 6f, 0.05f, 1.5f) { MAG = 30 }, Mov = 3.0f, Range = 1.5f,
                 Skills = new[] { "stium_spin", "stium_smash", "stium_darkwave", "stium_pulse", "stium_grasp", "stium_harvest" },
-                Passive = "sturdy", NumbersSet = true },
+                Passive = "sturdy", NumbersSet = true, Enabled = true },
             new CharacterDef { Id = "ern", Name = "에른 스트레이", Kind = "근거리 딜탱", BaseRole = Role.Dealer,
                 DefaultStrategy = Strategy.Flank, Base = new Stats(110, 0, 11, 4, 10f, 0.10f, 1.5f), Mov = 3.5f, Range = 1.5f,
-                Skills = new[] { "slash", "triple_slash", "fire_blade" }, Passive = "keen_eye" },
+                Skills = new[] { "ern_fire_slash", "ern_fire_stream", "ern_fire_buster", "ern_fire_execution", "ern_fire_blade", "ern_fireball" },
+                Passive = "keen_eye", Enabled = true },
             new CharacterDef { Id = "mel", Name = "멜 발렌티나", Kind = "서포터, 원거리 딜러", BaseRole = Role.Supporter,
                 DefaultStrategy = Strategy.Kite, Base = new Stats(80, 0, 9, 2, 10f, 0.05f, 1.5f), Mov = 3.0f, Range = 7f,
-                Skills = new[] { "shot", "first_aid", "cheer" }, Passive = "swift" },
+                Skills = new[] { "mel_thunder", "mel_fire_buster", "mel_coin_toss", "mel_divine_shield", "mel_railgun", "mel_absolute_zero" },
+                Passive = "swift", Enabled = true },
             new CharacterDef { Id = "vendetta", Name = "벤데타", Kind = "원거리 딜러", BaseRole = Role.Dealer,
                 DefaultStrategy = Strategy.Kite, Base = new Stats(75, 0, 12, 2, 10f, 0.10f, 1.6f), Mov = 3.0f, Range = 8f,
-                Skills = new[] { "shot", "power_shot", "guard" }, Passive = "keen_eye" },
+                Skills = new[] { "vd_incendiary", "vd_freeze", "vd_pierce", "vd_pilebunker", "vd_missiles", "vd_sniper" },
+                Passive = "keen_eye", Enabled = true },
             new CharacterDef { Id = "paracelsus", Name = "파라켈수스", Kind = "서포터", BaseRole = Role.Supporter,
                 DefaultStrategy = Strategy.Escort, Base = new Stats(85, 0, 6, 3, 9f, 0.05f, 1.5f), Mov = 3.0f, Range = 6f,
-                Skills = new[] { "first_aid", "cheer", "shot" }, Passive = "regen" },
+                Skills = new[] { "pc_coagulant", "pc_purify", "pc_corrode", "pc_silver_arrow", "pc_elixir", "pc_mercury_wall" },
+                Passive = "regen", Enabled = true },
 
             // 나머지 43명: 이름 · 유형 · 기본 역할 · 기본 전략은 기획서 5장 표 그대로.
             // 스탯 · 스킬은 첫 번째 유형의 틀(Template)로 채운 자리 표시 [임시] — 고유 스킬 구현 전 구조 테스트용.
-            T("c06", "메일 보레아", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser),
+            T("c06", "메일 보레아", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser, new[] { "mail_shoulder", "mail_stomp", "mail_smash", "mail_harden", "mail_slash_blast", "mail_overdrive" }),
             T("c07", "모모로이 세이린", "탱커, 서포터", Role.Tank, Strategy.Charge, Tpl.Tank),
             T("c08", "투견", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser),
             T("c09", "마리스 레지나", "암살자", Role.Dealer, Strategy.Flank, Tpl.Assassin),
             T("c10", "레일 루카스", "근거리 딜러", Role.Dealer, Strategy.Flank, Tpl.Melee),
             T("c11", "베들렌 메릴", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser),
             T("c12", "릭 엔더빌", "근거리 딜러", Role.Dealer, Strategy.Flank, Tpl.Melee),
-            T("c13", "아그니", "근거리 딜러", Role.Dealer, Strategy.Charge, Tpl.Melee),
+            T("c13", "아그니", "근거리 딜러", Role.Dealer, Strategy.Charge, Tpl.Melee, new[] { "agni_kick", "agni_flurry", "agni_rising", "agni_meteor", "agni_crusher", "agni_knee" }),
             T("c14", "노와", "암살자", Role.Dealer, Strategy.Flank, Tpl.Assassin),
             T("c15", "슈진 잔엔", "근거리 딜러", Role.Dealer, Strategy.Charge, Tpl.Melee),
             T("c16", "청란", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser),
             T("c17", "한니발 멜카르티드", "암살자", Role.Dealer, Strategy.Flank, Tpl.Assassin),
             T("c18", "이게르투스", "탱커", Role.Tank, Strategy.Charge, Tpl.Tank),
-            T("c19", "요월", "근거리 딜러", Role.Dealer, Strategy.Charge, Tpl.Melee),
+            T("c19", "요월", "근거리 딜러", Role.Dealer, Strategy.Charge, Tpl.Melee, new[] { "yw_moonlight", "yw_moonflash", "yw_fullmoon", "yw_moonfall", "yw_eclipse_cut", "yw_annular" }),
             T("c20", "환백", "암살자", Role.Dealer, Strategy.Flank, Tpl.Assassin),
             T("c21", "흑영", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser),
             T("c22", "야월", "암살자", Role.Dealer, Strategy.Flank, Tpl.Assassin),
@@ -234,30 +374,38 @@ namespace TextSlayers
             T("c29", "앨리스", "근거리 딜러", Role.Dealer, Strategy.Flank, Tpl.Melee),
             T("c30", "베네딕트 테너브리움", "탱커", Role.Tank, Strategy.Charge, Tpl.Tank),
             T("c31", "에퀴녹스 파리에눔", "암살자", Role.Dealer, Strategy.Flank, Tpl.Assassin),
-            T("c32", "라바다", "근거리 딜탱, 서포터", Role.Dealer, Strategy.Escort, Tpl.Bruiser),
+            T("c32", "라바다", "근거리 딜탱, 서포터", Role.Dealer, Strategy.Escort, Tpl.Bruiser, new[] { "lv_light_pierce", "lv_blessing", "lv_silence", "lv_sanctuary", "lv_bless_judge", "lv_judgement" }),
             T("c33", "엘 카벤", "근거리 딜탱, 서포터", Role.Dealer, Strategy.Escort, Tpl.Bruiser),
             T("c34", "사우윈 키르윈", "탱커", Role.Tank, Strategy.Charge, Tpl.Tank),
             T("c35", "이믈록 사비아", "원거리 딜러", Role.Dealer, Strategy.Kite, Tpl.Ranged),
             T("c36", "발타너 트래헌", "근거리 딜러", Role.Dealer, Strategy.Flank, Tpl.Melee),
             T("c37", "루나사 키아라", "원거리 딜러, 서포터", Role.Dealer, Strategy.Kite, Tpl.Ranged),
-            T("c38", "레온하르트", "근거리 딜탱, 탱커, 서포터", Role.Dealer, Strategy.Charge, Tpl.Bruiser),
+            T("c38", "레온하르트", "근거리 딜탱, 탱커, 서포터", Role.Dealer, Strategy.Charge, Tpl.Bruiser, new[] { "lh_lion_crash", "lh_roar", "lh_kings_leap", "lh_buster_slash", "lh_counter_slash", "lh_sky_splitter" }),
             T("c39", "드로미", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser),
-            T("c40", "펜리르", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser),
-            T("c41", "사하라", "근거리 딜탱, 서포터", Role.Dealer, Strategy.Escort, Tpl.Bruiser),
+            T("c40", "펜리르", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser, new[] { "fr_hunt_leap", "fr_ambush", "fr_chain", "fr_eclipse_jaws", "fr_pack_hunt", "fr_ground_slam" }),
+            T("c41", "사하라", "근거리 딜탱, 서포터", Role.Dealer, Strategy.Escort, Tpl.Bruiser, new[] { "sh_flash", "sh_seal", "sh_suppress", "sh_dark_cut", "sh_annihilate", "sh_ward" }),
             T("c42", "갈 빌랜드", "탱커, 서포터", Role.Tank, Strategy.Charge, Tpl.Tank),
-            T("c43", "니그레도", "원거리 딜러", Role.Dealer, Strategy.Kite, Tpl.Ranged),
+            T("c43", "니그레도", "원거리 딜러", Role.Dealer, Strategy.Kite, Tpl.Ranged, new[] { "ng_black_shot", "ng_black_solution", "ng_black_sediment", "ng_black_chain", "ng_decompose", "ng_black_guard" }),
             T("c44", "알베도", "암살자", Role.Dealer, Strategy.Flank, Tpl.Assassin),
             T("c45", "치트리니타스", "탱커", Role.Tank, Strategy.Charge, Tpl.Tank),
             T("c46", "비리디타스", "서포터", Role.Supporter, Strategy.Escort, Tpl.Support),
             T("c47", "루베도", "원거리 딜러", Role.Dealer, Strategy.Kite, Tpl.Ranged),
-            T("c48", "가니악 벤데스트라", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser),
+            T("c48", "가니악 벤데스트라", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser, new[] { "gn_fang", "gn_wave", "gn_grasp", "gn_abyss_dance", "gn_inverted_cross", "gn_erosion" }),
         };
 
         /// <summary>자리 표시 캐릭터의 스탯 · 스킬 틀 (첫 번째 유형 기준) [임시].</summary>
         enum Tpl { Bruiser, Melee, Tank, Assassin, Ranged, Support }
 
         // 정적 필드 초기화 순서에 기대지 않도록 값은 메서드 안에서 만든다.
-        static CharacterDef T(string id, string name, string kind, Role role, Strategy strategy, Tpl tpl)
+        /// <param name="concept">스킬 컨셉 액티브 (있으면 출전 가능, 없으면 비활성)</param>
+        static CharacterDef T(string id, string name, string kind, Role role, Strategy strategy, Tpl tpl, string[] concept = null)
+        {
+            var c = T0(id, name, kind, role, strategy, tpl);
+            if (concept != null) { c.Skills = concept; c.Enabled = true; }
+            return c;
+        }
+
+        static CharacterDef T0(string id, string name, string kind, Role role, Strategy strategy, Tpl tpl)
         {
             var c = new CharacterDef { Id = id, Name = name, Kind = kind, BaseRole = role, DefaultStrategy = strategy };
             switch (tpl)
@@ -292,8 +440,11 @@ namespace TextSlayers
             new FieldEnemyDef { Id = "hobgoblin", Strategy = Strategy.Charge, Mov = 2.2f, Range = 1.8f,
                 Skills = new[] { "heavy_blow" } },
             // 테스트 더미: 근거리는 돌진, 원거리는 도주 · 견제로 움직인다 [임시]
-            new FieldEnemyDef { Id = "test_dummy_melee", Strategy = Strategy.Charge, Mov = 2.5f, Range = 1.5f, Immortal = true },
-            new FieldEnemyDef { Id = "test_dummy_ranged", Strategy = Strategy.Kite, Mov = 2.5f, Range = 7f, Immortal = true },
+            // 기본 공격: 근접 더미 횡베기 · 원거리 더미 파티클 탄 (사용자 2026-11-26). 공격력 0 이라 피해는 0.
+            new FieldEnemyDef { Id = "test_dummy_melee", Strategy = Strategy.Charge, Mov = 2.5f, Range = 1.5f, Immortal = true,
+                Basic = BasicKind.HSlash, BasicColor = new Color(1f, 0.45f, 0.35f) },
+            new FieldEnemyDef { Id = "test_dummy_ranged", Strategy = Strategy.Kite, Mov = 2.5f, Range = 7f, Immortal = true,
+                Basic = BasicKind.Bolt, BasicColor = new Color(1f, 0.55f, 0.3f) },
         };
 
         // ── 스테이지 [임시] ──
@@ -339,6 +490,8 @@ namespace TextSlayers
             {
                 skillById = new Dictionary<string, FieldSkillDef>();
                 foreach (var s in SkillTable) skillById[s.Id] = s;
+                foreach (var s in ConceptSkills.All) skillById[s.Id] = s;
+                foreach (var s in skillById.Values) ConceptCombat.Apply(s);
             }
             if (id != null && skillById.TryGetValue(id, out var def)) return def;
             return null;
@@ -351,6 +504,7 @@ namespace TextSlayers
             {
                 passiveById = new Dictionary<string, FieldPassiveDef>();
                 foreach (var p in PassiveTable) passiveById[p.Id] = p;
+                foreach (var p in ConceptCharacters.Passives) passiveById[p.Id] = p;
             }
             if (id != null && passiveById.TryGetValue(id, out var def)) return def;
             return null;
@@ -375,17 +529,46 @@ namespace TextSlayers
             return Roster[0];
         }
 
-        /// <summary>캐릭터 기본 구성으로 만든 편성 한 칸.</summary>
+        /// <summary>캐릭터 기본 구성으로 만든 편성 한 칸 (액티브 앞 3개 · 패시브 첫 번째).</summary>
         public static PartySlot DefaultSlot(string characterId)
         {
             var c = Character(characterId);
+            int n = Mathf.Min(MaxEquipActives, c.Skills.Length);
+            var skills = new string[n];
+            System.Array.Copy(c.Skills, skills, n);
             return new PartySlot
             {
                 Def = c,
                 Strategy = c.DefaultStrategy,
-                Skills = (string[])c.Skills.Clone(),
-                Passive = c.Passive,
+                Skills = skills,
+                Passive = c.Passives.Length > 0 ? c.Passives[0] : c.Passive,
             };
+        }
+
+        public const int MaxEquipActives = 3;     // 장착: 액티브 3 + 패시브 1
+
+        /// <summary>선택 화면의 전술 4종 (사용자 2026-11-26).</summary>
+        public static readonly Strategy[] PlayerStrategies = { Strategy.Charge, Strategy.Flank, Strategy.Kite, Strategy.Backline };
+
+        // ── 기본 공격 투사체 (원거리 기본 공격) ──
+        static readonly Dictionary<BasicKind, FieldSkillDef> basicShots = new Dictionary<BasicKind, FieldSkillDef>();
+
+        public static bool IsRangedBasic(BasicKind k) =>
+            k == BasicKind.IceShard || k == BasicKind.Pistol || k == BasicKind.Potion || k == BasicKind.DarkOrb || k == BasicKind.Bolt;
+
+        /// <summary>원거리 기본 공격용 투사체 정의 (공격력 100% 물리). 종류별로 하나.</summary>
+        public static FieldSkillDef BasicShot(BasicKind kind, Color color, float range)
+        {
+            if (basicShots.TryGetValue(kind, out var s)) return s;
+            ShotStyle style = kind == BasicKind.IceShard ? ShotStyle.Shard
+                            : kind == BasicKind.Pistol ? ShotStyle.Bullet
+                            : kind == BasicKind.Potion ? ShotStyle.Potion
+                            : kind == BasicKind.Bolt ? ShotStyle.Spark : ShotStyle.Orb;
+            s = new FieldSkillDef { Id = "basic_" + kind, Name = "공격", Shape = SkillShape.Projectile, Coef = 1f,
+                                    Range = range + 1f, Shot = style, FxColor = color, Fx2 = FieldEffectKind.Burst, Radius = 0.45f, Quiet = true,
+                                    KnockLevel = 0 };   // 넉백은 쏜 유닛의 BasicKnock 으로 (FieldProjectile.BasicKnock)
+            basicShots[kind] = s;
+            return s;
         }
 
         // ── 스탯 ──
@@ -430,6 +613,7 @@ namespace TextSlayers
                 case Strategy.Flank: return Role.Dealer;
                 case Strategy.Kite: return Role.Dealer;
                 case Strategy.Escort: return Role.Supporter;
+                case Strategy.Backline: return Role.Dealer;
                 default: return null;
             }
         }
@@ -478,9 +662,10 @@ namespace TextSlayers
             switch (s)
             {
                 case Strategy.Charge: return "돌진";
-                case Strategy.Flank: return "후방 침투";
+                case Strategy.Flank: return "후방 침입";
                 case Strategy.Kite: return "도주 · 견제";
                 case Strategy.Escort: return "호위";
+                case Strategy.Backline: return "후방 우선 공격";
                 default: return "진형 유지";
             }
         }

@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace TextSlayers
 {
-    public enum GameScreen { Title, Lobby, StageSelect, Character, Battle, Result, FieldStageSelect, PartySelect, FieldBattle }
+    public enum GameScreen { Title, Lobby, StageSelect, Character, Battle, Result, FieldStageSelect, PartySelect, FieldBattle, Loadout, EnemySetup }
 
     public struct ResultInfo
     {
@@ -163,6 +163,7 @@ namespace TextSlayers
         public void ToggleParty(string characterId)
         {
             if (SelectedParty.Remove(characterId)) return;
+            if (!FieldData.Character(characterId).Enabled) return;   // 비활성 캐릭터는 출전 불가
             if (SelectedParty.Count >= FieldConst.MaxPartySize)
             {
                 ShowToast($"최대 {FieldConst.MaxPartySize}명까지 선택할 수 있습니다.");
@@ -171,13 +172,113 @@ namespace TextSlayers
             SelectedParty.Add(characterId);
         }
 
+        // ── 출전 구성 (전술 · 패시브 1 · 액티브 3), 세션 동안 캐릭터별로 유지 ──
+        readonly System.Collections.Generic.Dictionary<string, PartySlot> loadouts =
+            new System.Collections.Generic.Dictionary<string, PartySlot>();
+
+        public PartySlot Loadout(string characterId)
+        {
+            if (!loadouts.TryGetValue(characterId, out var slot))
+            {
+                slot = FieldData.DefaultSlot(characterId);
+                if (System.Array.IndexOf(FieldData.PlayerStrategies, slot.Strategy) < 0) slot.Strategy = Strategy.Charge;
+                loadouts[characterId] = slot;
+            }
+            return slot;
+        }
+
+        /// <summary>캐릭터 선택 → 전술 · 스킬 선택 화면.</summary>
+        public void GoLoadout()
+        {
+            if (SelectedParty.Count == 0) return;
+            Current = GameScreen.Loadout;
+        }
+
+        /// <summary>액티브 장착 토글 (최대 3).</summary>
+        public void ToggleActive(string characterId, string skillId)
+        {
+            var slot = Loadout(characterId);
+            var list = new System.Collections.Generic.List<string>(slot.Skills);
+            if (list.Remove(skillId)) { slot.Skills = list.ToArray(); return; }
+            if (list.Count >= FieldData.MaxEquipActives)
+            {
+                ShowToast($"액티브는 {FieldData.MaxEquipActives}개까지 장착합니다.");
+                return;
+            }
+            // 캐릭터 스킬 목록 순서를 유지한다
+            list.Add(skillId);
+            var order = FieldData.Character(characterId).Skills;
+            list.Sort((a, b) => System.Array.IndexOf(order, a).CompareTo(System.Array.IndexOf(order, b)));
+            slot.Skills = list.ToArray();
+        }
+
+        /// <summary>모든 출전 캐릭터가 액티브 3개를 골랐는가 (글러트니는 고정이라 예외).</summary>
+        /// <summary>디버그 맵 적 구성 (세션 동안 유지). 기본: 더미 1 돌진 × 4, 더미 2 도주 · 견제 × 3.</summary>
+        public EnemySetup DebugEnemies { get; } = MakeDefaultEnemies();
+
+        static EnemySetup MakeDefaultEnemies()
+        {
+            var e = new EnemySetup();
+            e.Add("test_dummy_melee", Strategy.Charge, 4);
+            e.Add("test_dummy_ranged", Strategy.Kite, 3);
+            return e;
+        }
+
+        /// <summary>전술 · 스킬 선택 다음: 디버그 맵이면 적 전술 창, 아니면 바로 출전.</summary>
+        public void NextFromLoadout()
+        {
+            if (!LoadoutReady(out string problem)) { ShowToast(problem); return; }
+            if (PendingFieldStage != null && PendingFieldStage.IsTest) Current = GameScreen.EnemySetup;
+            else StartFieldStage();
+        }
+
+        /// <summary>더미 1명 추가 (종류 기본 전술: 근거리 돌진 · 원거리 도주 · 견제).</summary>
+        public void AddDebugEnemy(string id)
+        {
+            if (DebugEnemies.Total >= FieldBattle.MaxDebugEnemies)
+            {
+                ShowToast($"적은 최대 {FieldBattle.MaxDebugEnemies}명까지 배치할 수 있습니다.");
+                return;
+            }
+            DebugEnemies.Add(id, FieldData.Enemy(id).Strategy);
+        }
+
+        public void ResetDebugEnemies()
+        {
+            DebugEnemies.Entries.Clear();
+            DebugEnemies.Add("test_dummy_melee", Strategy.Charge, 4);
+            DebugEnemies.Add("test_dummy_ranged", Strategy.Kite, 3);
+        }
+
+        public bool LoadoutReady(out string problem)
+        {
+            foreach (var id in SelectedParty)
+            {
+                var slot = Loadout(id);
+                if (slot.Passive == ConceptCharacters.GluttonPassive) continue;
+                if (slot.Skills.Length != FieldData.MaxEquipActives)
+                {
+                    problem = $"{slot.Def.Name}: 액티브 {FieldData.MaxEquipActives}개를 골라 주세요 ({slot.Skills.Length}/{FieldData.MaxEquipActives})";
+                    return false;
+                }
+            }
+            problem = null;
+            return true;
+        }
+
         public void StartFieldStage()
         {
             if (PendingFieldStage == null || SelectedParty.Count == 0) return;
+            if (!LoadoutReady(out string problem)) { ShowToast(problem); return; }
             var party = new PartySlot[SelectedParty.Count];
-            for (int i = 0; i < party.Length; i++) party[i] = FieldData.DefaultSlot(SelectedParty[i]);
+            for (int i = 0; i < party.Length; i++)
+            {
+                var l = Loadout(SelectedParty[i]);
+                party[i] = new PartySlot { Def = l.Def, Strategy = l.Strategy, Skills = (string[])l.Skills.Clone(), Passive = l.Passive };
+            }
             Log.Clear();
-            Field = new FieldBattle(PendingFieldStage, party, Progress.Level, System.Environment.TickCount, recordEvents: true);
+            var enemies = PendingFieldStage.IsTest ? DebugEnemies : null;
+            Field = new FieldBattle(PendingFieldStage, party, Progress.Level, System.Environment.TickCount, recordEvents: true, enemies: enemies);
             FieldPaused = false;
             DrainFieldEvents();
             Current = GameScreen.FieldBattle;
