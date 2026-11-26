@@ -38,11 +38,12 @@ namespace TextSlayers
         /// 마법 = (기본 피해량 + 마력 × 계수) × (1 − 저항력/100). 합에 배율 → 치명타 → ±난수 → 방어 감소.
         /// 배율이 0 이면 (수치 미정 캐릭터) 피해 0. `[해석]` 치명타 · 난수는 합 전체에 적용.
         /// </summary>
+        /// <param name="resDown">대상 저항력 감소 (어둠 잠식 1당 -1 등)</param>
         public static HitResult ComputeSkill(Combatant attacker, Combatant target, float atkCoef, float magicBase,
-                                             float magicCoef, System.Random rng, float mul = 1f)
+                                             float magicCoef, System.Random rng, float mul = 1f, int resDown = 0)
         {
             float phys = attacker.Stats.ATK * atkCoef * (1f - Mathf.Clamp(target.Stats.DEF, 0, 100) / 100f);
-            float magic = (magicBase + attacker.Stats.MAG * magicCoef) * (1f - Mathf.Clamp(target.Stats.RES, 0, 100) / 100f);
+            float magic = (magicBase + attacker.Stats.MAG * magicCoef) * (1f - Mathf.Clamp(target.Stats.RES - resDown, 0, 100) / 100f);
             float raw = (phys + magic) * mul;
             if (raw <= 0f) return new HitResult { Amount = 0 };
 
@@ -54,6 +55,13 @@ namespace TextSlayers
             if (guarded) raw *= GameData.GuardReduction;
 
             return new HitResult { Amount = Mathf.Max(1, Mathf.RoundToInt(raw)), Crit = crit, Guarded = guarded };
+        }
+
+        /// <summary>고정 피해 = 대상 최대 체력 × 비율 × 배율 (방어 · 저항 · 치명 무시). 배율 0 이면 0.</summary>
+        public static int Fixed(Combatant target, float ratioOfMaxHp, float mul = 1f)
+        {
+            float raw = target.Stats.HP * ratioOfMaxHp * mul;
+            return raw <= 0f ? 0 : Mathf.Max(1, Mathf.RoundToInt(raw));
         }
 
         /// <summary>회복량 = ATK × 버프 × 계수 (v0.2). 피해와 같은 파일에서만 계산한다.</summary>
