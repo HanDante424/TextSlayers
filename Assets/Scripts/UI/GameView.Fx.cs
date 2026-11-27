@@ -509,6 +509,7 @@ namespace TextSlayers
                         Vector2 a = c, z = P(e.End);
                         Vector2 pos = Vector2.Lerp(a, z, t);
                         pos.y -= Mathf.Sin(t * Mathf.PI) * unit * 1.2f;
+                        if (DrawPotion(e.SkillId, pos, unit, age)) break;
                         DrawFx(fxDisc, pos, U * 0.8f, main, 0.65f);
                         DrawFx(fxDisc, pos, U * 0.4f, light, 1f);
                         break;
@@ -647,6 +648,7 @@ namespace TextSlayers
                     {
                         float k = p.Total > 0f ? Mathf.Clamp01(p.Traveled / p.Total) : 0f;
                         Vector2 lifted = pos + new Vector2(0f, -Mathf.Sin(k * Mathf.PI) * unit * 1.1f);
+                        if (DrawPotion(p.Skill.Id, lifted, unit, b.Time)) break;
                         DrawFx(fxDisc, lifted, U * 0.6f, main, 0.75f);
                         DrawFx(fxDisc, lifted, U * 0.3f, light, 1f);
                         break;

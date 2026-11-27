@@ -558,10 +558,13 @@ namespace TextSlayers
                 r.y += Mathf.Cos(b.Time * 87f) * ShakePixels * 0.6f * k;
             }
             Fill(r, FieldBg);
+            // 바닥 타일이 있으면 거리 눈금은 옅게
+            Color line = FieldLine;
+            if (DrawGround(r, unit, b)) line.a *= 0.3f;
             for (int i = 1; i < (int)FieldConst.Width; i++)
-                Fill(new Rect(r.x + i * unit, r.y, 1, r.height), FieldLine);
+                Fill(new Rect(r.x + i * unit, r.y, 1, r.height), line);
             for (int i = 1; i < (int)FieldConst.Height; i++)
-                Fill(new Rect(r.x, r.y + i * unit, r.width, 1), FieldLine);
+                Fill(new Rect(r.x, r.y + i * unit, r.width, 1), line);
 
             DrawGroundEffects(r, unit, b);          // 바닥 잔흔은 유닛 아래
             foreach (var u in b.Enemies) DrawUnit(r, unit, u, b.Time);
@@ -660,7 +663,8 @@ namespace TextSlayers
                     Fill(new Rect(cx - side * d * 0.55f - d * 0.22f, cy - d * 0.45f, d * 0.44f, d * 0.8f), new Color(0.35f, 0.33f, 0.3f));   // 케이스
                     Fill(new Rect(cx - side * d * 0.55f - d * 0.18f, cy - d * 0.4f, d * 0.36f, d * 0.08f), new Color(0.6f, 0.55f, 0.45f));
                 }
-                Fill(new Rect(cx + side * d * 0.5f - (side < 0 ? d * 0.34f : 0f), cy, d * 0.34f, d * 0.14f), new Color(0.75f, 0.75f, 0.8f)); // 권총
+                if (sprite == null)   // 도트가 있으면 권총 도트를 몸 위에 그린다 (아래 DrawVendettaPistol)
+                    Fill(new Rect(cx + side * d * 0.5f - (side < 0 ? d * 0.34f : 0f), cy, d * 0.34f, d * 0.14f), new Color(0.75f, 0.75f, 0.8f));
             }
 
             Color bodyColor = u.IsPlayer ? PlayerColor : EnemyColor;
@@ -689,6 +693,7 @@ namespace TextSlayers
             else
             {
                 DrawFieldSprite(sprite, spriteRect, faceLeft, u, flash);
+                if (u.Def != null && u.Def.ShowWeapons) DrawVendettaPistol(spriteRect, faceLeft);
                 nameRect.height = small.lineHeight;
                 nameRect.y = FieldSpriteHead(spriteRect) - nameRect.height;
             }
