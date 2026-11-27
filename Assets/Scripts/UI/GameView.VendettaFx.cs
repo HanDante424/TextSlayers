@@ -7,6 +7,21 @@ namespace TextSlayers
     {
         // 벤데타 연출 (사용자 2026-11-27)
 
+        // 권총 도트 (Vendetta_Palameltin_64 를 좌우로 뒤집고 절반 크기로 줄인 것, 총구가 오른쪽)
+        const float PistolHandX = 42f, PistolHandY = 43f;   // 벤데타 도트에서 손 위치 (64×64 기준, 오른쪽을 볼 때)
+        const float PistolGripX = 6f, PistolGripY = 20f;    // 권총 도트에서 손잡이 위치
+
+        static void DrawVendettaPistol(Rect body, bool faceLeft)
+        {
+            var texture = WeaponTexture("vendetta_pistol");
+            if (texture == null) return;
+            float pixel = body.width / FieldSpriteCanvasSize;
+            float handX = faceLeft ? FieldSpriteCanvasSize - PistolHandX : PistolHandX;
+            float gripX = faceLeft ? FieldSpriteCanvasSize - PistolGripX : PistolGripX;
+            var rect = new Rect(body.x + (handX - gripX) * pixel, body.y + (PistolHandY - PistolGripY) * pixel, body.width, body.height);
+            PaintFieldSprite(rect, texture, faceLeft, Color.white);
+        }
+
         const float ThrustSpacing = 0.032f;   // 이 시간 간격의 지난 위치마다 추진 연기 · 불씨 [임시]
 
         /// <summary>벤데타 전용 적중 시트. 없으면 null.</summary>
