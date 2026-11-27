@@ -1,0 +1,192 @@
+// 에른 스킬 이펙트 2차. 좌표는 도트 단위.
+import { Particles, P, PF, Rng, fit, sparkle, rand, clamp, ease, WHITE, TAU, hex } from "./pixelfx/src/core/index.js";
+
+const FIRE = ["#14040a", "#3a0a14", "#8a1a10", "#c9281f", "#f2561d", "#ff8a2a", "#ffc23d", "#fff3a6"];
+const K = 0.7;   // 지면 이펙트의 세로 압축
+const make = (id, meta, create) => {
+  const m = { name: id, loop: false, options: {}, fps: 30, ...meta };
+  return { id: "custom/" + id, meta: m, mod: { meta: m, create } };
+};
+
+// 불꽃 한 송이: 아래가 둥글고 위로 뾰족 (밑동이 (x, y))
+function tongue(p, C, x, y, w, h, a) {
+  for (let i = 0; i <= h; i += 0.7) {
+    const u = i / h, half = w * (1 - u * u) * (0.75 + 0.25 * Math.sin(u * 9 + x));
+    for (let o = -half; o <= half; o += 0.7) {
+      const q = Math.abs(o) / (half + 0.01);
+      p.dot(x + o, y - i, C[q > 0.7 || u > 0.75 ? 4 : q > 0.4 || u > 0.45 ? 5 : u > 0.2 ? 6 : 7], a);
+    }
+  }
+}
+
+// 파이어 버스터: 큰 폭발 + 주변으로 퍼지는 화염파 (지면, 70% 눕힘). 반지름 2.5칸 ≈ 139 도트
+export function ernBuster() {
+  const R0 = 139, D = 1.25;
+  return make("ernBuster", { size: [340, 300], origin: [170, 170], duration: D }, () => {
+    const C = fit(FIRE, 8), R = new Rng(41), ps = new Particles({ rng: R, ground: () => 1000, sparks: [WHITE, C[7], C[6], C[4]] });
+    const flames = Array.from({ length: 96 }, (_, i) => ({ a: (i / 96) * TAU + R.range(-0.04, 0.04), r: R.range(0.86, 1.04), h: R.range(11, 26), w: R.range(3, 6), s: R.next() * 9 }));
+    const core = Array.from({ length: 52 }, () => ({ a: R.range(0, TAU), v: R.range(30, 240), size: R.range(8, 17), life: R.range(0.35, 0.75), up: R.range(10, 70) }));
+    for (let i = 0; i < 110; i++) {
+      const a = R.range(0, TAU), sp = R.range(150, 430);
+      ps.spawn(P.MOTE, 0, -8, Math.cos(a) * sp, Math.sin(a) * sp * K - R.range(0, 40), R.range(0.2, 0.6), R.chance(0.5) ? C[7] : C[6], R.range(0.9, 1.6));
+    }
+    let t = 0;
+    return {
+      update(dt) { t += dt; ps.update(dt); },
+      draw(p) {
+        const wave = ease.outCubic(clamp(t / 0.55)), r = 14 + (R0 - 14) * wave, fade = 1 - clamp((t - 0.6) / 0.55);
+        // 그을린 바닥
+        for (let y = -Math.ceil(r * K); y <= r * K; y += 1)
+          for (let x = -Math.ceil(r); x <= r; x += 1) {
+            const d = Math.hypot(x / r, y / (r * K));
+            if (d <= 1 && ((x + y) & 1) === 0) p.dot(x, y, d > 0.82 ? C[3] : C[1], (d > 0.82 ? 0.38 : 0.22) * fade);
+          }
+        // 화염파: 뒤쪽 불꽃 → 앞쪽 불꽃 순으로
+        const list = flames.slice().sort((u, v) => Math.sin(u.a) - Math.sin(v.a));
+        for (const f of list) {
+          const x = Math.cos(f.a) * r * f.r, y = Math.sin(f.a) * r * f.r * K;
+          const flick = 0.75 + 0.25 * Math.sin(t * 40 + f.s * 5), h = f.h * flick * (1 - clamp((t - 0.45) / 0.7) * 0.8);
+          if (fade > 0.02) tongue(p, C, x, y, f.w * fade, h, fade);
+        }
+        for (let g = 0; g < TAU; g += 0.006) p.dot(Math.cos(g) * r, Math.sin(g) * r * K, C[t < 0.25 ? 7 : 5], fade);
+        // 중심의 큰 폭발
+        for (const q of core) {
+          const u = t / q.life;
+          if (u >= 1) continue;
+          const go = (1 - Math.exp(-6 * t)) / 6, x = Math.cos(q.a) * q.v * go, y = Math.sin(q.a) * q.v * go * K - q.up * go * 2.2;
+          const s = q.size * (1 - u * 0.65);
+          p.disc(x, y, s, C[clamp(Math.round(6.5 - u * 4.5), 2, 6)], 1);
+          if (u < 0.45) p.disc(x - s * 0.2, y - s * 0.25, s * 0.55, C[7], 1);
+        }
+        if (t < 0.1) {
+          p.circle(0, -12, 34 * (1 - t / 0.1) + 10, WHITE);
+          p.glow(0, -10, 120, C[5], 1);
+        } else p.glow(0, -10, 100, C[4], 0.5 * (1 - clamp((t - 0.1) / 0.5)));
+        ps.draw(p);
+      },
+    };
+  });
+}
+
+// 파이어 스트림: 몸을 휘감아 도는 원기둥 화염 폭풍 (반복). 기준점 = 발
+export function fireStorm() {
+  const D = 0.5;
+  return make("fireStorm", { size: [110, 140], origin: [55, 118], duration: D, loop: true, fps: 20 }, () => {
+    const C = fit(FIRE, 8), R = new Rng(6);
+    const bits = Array.from({ length: 150 }, (_, i) => ({ h: R.next(), a: R.range(0, TAU), s: R.range(2.2, 5.2), k: 1 + (i % 2), turn: 2 + (i % 2) }));
+    let t = 0;
+    return {
+      update(dt) { t += dt; },
+      draw(p) {
+        const ph = (t % D) / D;
+        const list = bits.map((b) => {
+          const h = (b.h + ph * b.k) % 1, a = b.a + ph * TAU * b.turn + h * 5, r = 20 + h * 17 + Math.sin(h * 12 + b.a) * 3;
+          return { x: Math.cos(a) * r, y: Math.sin(a) * r * 0.34 - h * 92, depth: Math.sin(a), h, s: b.s * (1 - h * 0.45), tx: -Math.sin(a), ty: Math.cos(a) * 0.34 };
+        }).sort((u, v) => u.depth - v.depth);
+        p.glow(0, -34, 50, C[4], 0.4);
+        for (const q of list) {
+          const back = q.depth < 0, c = C[back ? (q.h > 0.6 ? 2 : 3) : q.h > 0.75 ? 4 : q.depth > 0.6 ? 6 : 5];
+          const len = back ? 6 : 9;
+          for (let i = 0; i < len; i++) p.disc(q.x - q.tx * i, q.y - q.ty * i - 0, Math.max(0.6, q.s * (1 - i / len) * (back ? 0.7 : 0.9)), c, back ? 0.55 : 0.92);
+          if (!back && q.depth > 0.75 && q.h < 0.5) p.dot(q.x, q.y, C[7], 1);
+        }
+        for (let g = 0; g < TAU; g += 0.04) p.dot(Math.cos(g + ph * TAU) * 24, Math.sin(g + ph * TAU) * 9, C[g % 1 < 0.5 ? 6 : 4], 0.9);
+      },
+    };
+  });
+}
+
+// 파이어 스트림이 지나간 자리의 불길
+export function firePuff() {
+  return make("firePuff", { size: [60, 60], origin: [30, 40], duration: 0.6, fps: 20 }, () => {
+    const C = fit(FIRE, 8), R = new Rng(2), ps = new Particles({ rng: R, ground: () => 1000 });
+    for (let i = 0; i < 11; i++) ps.spawn(P.FIRE, R.range(-9, 9), R.range(-6, 4), R.range(-14, 14), -R.range(8, 36), R.range(0.25, 0.55), 0, R.range(3, 6.5), 0, R.chance(0.25) ? PF.SMOKES : 0);
+    for (let i = 0; i < 8; i++) ps.spawn(P.EMBER, R.range(-8, 8), R.range(-4, 4), R.range(-30, 30), -R.range(20, 60), R.range(0.3, 0.6), C[6], R.range(1, 1.8));
+    return { update: (dt) => ps.update(dt), draw: (p) => ps.draw(p) };
+  });
+}
+
+// 파이어 블레이드의 대상: 화염을 휘감은 참격이 잇달아 쏟아진다. 기준점 = 대상 몸 가운데
+export function flameSlashes(k = 2.1) {
+  const D = 0.65;
+  return make("flameSlashes", { size: [Math.round(130 * k), Math.round(120 * k)], origin: [Math.round(65 * k), Math.round(60 * k)], duration: D, fps: 30 }, () => {
+    const C = fit(FIRE, 8), R = new Rng(19), ps = new Particles({ rng: R, ground: () => 1000, sparks: [WHITE, C[7], C[6], C[4]] });
+    const cuts = Array.from({ length: 9 }, (_, i) => ({ at: i * 0.045 + R.range(0, 0.015), a: R.range(0, Math.PI), x: R.range(-13, 13) * k, y: R.range(-15, 15) * k, len: R.range(36, 62) * k, done: false }));
+    let t = 0;
+    return {
+      update(dt) {
+        t += dt;
+        for (const c of cuts)
+          if (!c.done && t >= c.at) {
+            c.done = true;
+            for (let i = 0; i < Math.round(13 * k); i++) {
+              const u = R.range(-0.5, 0.5), x = c.x + Math.cos(c.a) * c.len * u, y = c.y + Math.sin(c.a) * c.len * u;
+              ps.spawn(P.FIRE, x, y, R.range(-26, 26), -R.range(6, 46), R.range(0.16, 0.36), 0, R.range(2.2, 4.8) * Math.sqrt(k));
+              if (i % 2 === 0) ps.spawn(P.EMBER, x, y, R.range(-60, 60), -R.range(10, 80), R.range(0.25, 0.55), C[6], R.range(1, 1.8));
+            }
+          }
+        ps.update(dt);
+      },
+      draw(p) {
+        ps.draw(p);
+        for (const c of cuts) {
+          const u = (t - c.at) / 0.14;
+          if (u <= 0 || u >= 1) continue;
+          const head = ease.outCubic(clamp(u * 2.2)), tail = clamp((u - 0.35) / 0.65), nx = -Math.sin(c.a), ny = Math.cos(c.a);
+          for (let s = tail; s <= head; s += 0.012 / k) {
+            const d = (s - 0.5) * c.len, w = 4.2 * k * Math.sin(Math.PI * clamp(s)) * (1 - u * 0.5);
+            for (let o = -w; o <= w; o += 0.8) {
+              const q = Math.abs(o) / (w + 0.01);
+              p.dot(c.x + Math.cos(c.a) * d + nx * o, c.y + Math.sin(c.a) * d + ny * o, q < 0.3 ? WHITE : q < 0.55 ? C[7] : q < 0.8 ? C[5] : C[3], 1);
+            }
+          }
+          p.glow(c.x, c.y, 18 * k, C[4], 0.5 * (1 - u));
+        }
+      },
+    };
+  });
+}
+
+// 파이어 스트림: 가로로 누운 화염 관의 한 마디 (반복, 이어 붙임). front 는 캐릭터 앞, 아니면 뒤.
+export const TUBE = 56;
+export function fireTube(front) {
+  const D = 0.45, R0 = 31, id = front ? "fireTubeFront" : "fireTubeBack";
+  return make(id, { size: [TUBE + 44, 96], origin: [(TUBE + 44) >> 1, 48], duration: D, loop: true, fps: 20 }, () => {
+    const C = fit(FIRE, 8), R = new Rng(front ? 12 : 31);
+    const bits = Array.from({ length: front ? 34 : 72 }, () => ({ u: R.next(), a: R.range(0, TAU), s: R.range(2.2, 4.6), r: R.range(0.55, 1.1) }));
+    let t = 0;
+    return {
+      update(dt) { t += dt; },
+      draw(p) {
+        const ph = (t % D) / D;
+        const at = (b, back) => {
+          const x = ((b.u + ph) % 1) * TUBE - TUBE / 2;
+          const th = b.a + (x / TUBE) * TAU + ph * TAU - back * 0.16;     // 관의 축(가로)을 감아 돈다
+          return [x - back * 4.2, Math.sin(th) * R0 * b.r, Math.cos(th)];
+        };
+        if (!front) p.glow(0, 0, 40, C[3], 0.35);
+        for (const b of bits) {
+          const [, , depth] = at(b, 0);
+          if ((depth >= 0) !== front) continue;
+          const c = front ? C[depth > 0.7 ? 6 : 5] : C[depth < -0.7 ? 2 : 3];
+          for (let i = 7; i >= 0; i--) {                                  // 도는 방향의 꼬리
+            const [x, y] = at(b, i * 0.55);
+            p.disc(x, y, Math.max(0.7, b.s * (1 - i / 9)), i > 4 ? C[front ? 4 : 2] : c, front ? 0.8 - i * 0.075 : 0.85 - i * 0.06);
+          }
+          if (front && depth > 0.8) {
+            const [x, y] = at(b, 0);
+            p.dot(x, y, C[7], 1);
+          }
+        }
+        // 관의 위아래 테두리 불길
+        for (let x = -TUBE / 2; x < TUBE / 2; x += 1) {
+          const wob = Math.sin((x / TUBE) * TAU * 3 + ph * TAU * 2) * 2.4;
+          for (const side of [-1, 1]) {
+            p.dot(x, side * (R0 + 2) + wob, C[front ? 5 : 3], front ? 0.8 : 0.5);
+            p.dot(x, side * (R0 + 3) + wob, C[3], 0.6);
+          }
+        }
+      },
+    };
+  });
+}

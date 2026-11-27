@@ -129,6 +129,11 @@ namespace TextSlayers
                     DrawStiumGrasp(new Vector2(field.x + at.x * unit, field.y + at.y * unit), unit, b.Time - e.Start - e.Delay);
                     continue;
                 }
+                if (e.Kind == FieldEffectKind.Trail && IsErnSkill(e, "ern_fire_stream"))
+                {
+                    DrawFireTube(e, unit, b.Time - e.Start - e.Delay, v => new Vector2(field.x + v.x * unit, field.y + v.y * unit), false);
+                    continue;
+                }
                 if (IsAbsoluteZero(e))
                 {
                     DrawIceDebris(field, unit, e, b.Time - e.Start - e.Delay);
@@ -330,6 +335,7 @@ namespace TextSlayers
                 }
                 case FieldEffectKind.Whirl:       // 자신을 중심으로 화염 참격이 계속 생긴다
                 {
+                    if (IsErnSkill(e, "ern_fire_execution")) { DrawFireExecution(e, follow, unit, U, age); break; }
                     const float step = 0.1f, one = 0.28f;
                     int last = Mathf.FloorToInt(age / step);
                     for (int k = Mathf.Max(0, last - 3); k <= last; k++)

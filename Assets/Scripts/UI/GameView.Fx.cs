@@ -111,6 +111,8 @@ namespace TextSlayers
 
         static float FxLength(FieldEffect e)
         {
+            float ern = ErnEffectLength(e);
+            if (ern > 0f) return ern;
             switch (e.Kind)
             {
                 case FieldEffectKind.Spin: return IsStium(e) ? SheetTime("stiumSpin") : FxSpin * FxTimeMul;
@@ -119,13 +121,14 @@ namespace TextSlayers
                 case FieldEffectKind.Pulse: return IsStiumPulse(e) ? SheetTime("darkPulse") : FxPulse * FxTimeMul;
                 case FieldEffectKind.Grasp: return IsStium(e) ? SheetTime("grasp") : FxGrasp * FxTimeMul;
                 case FieldEffectKind.Harvest: return IsStium(e) ? HarvestLength : FxHarvest * FxTimeMul;
-                case FieldEffectKind.Slash: return FxSlash * FxTimeMul;
+                case FieldEffectKind.Slash: return IsFireSlash(e) ? SheetTime(FireSlashCleave.Sheet) : FxSlash * FxTimeMul;
                 case FieldEffectKind.Swing:
                 {
                     if (!HasWeaponSwing(e)) return FxSwing * FxTimeMul;
                     var weapon = WeaponOf(e);
-                    // 대검은 내려베기 잔흔이 남는다
-                    return weapon == Weapon.GreatSword ? SheetTime("cleave") : WeaponSwingTime(weapon);
+                    // 내려베기를 쓰는 무기는 잔흔이 남는 동안
+                    var cleave = CleaveOf(e);
+                    return cleave != null ? SheetTime(cleave.Sheet) : WeaponSwingTime(weapon);
                 }
                 case FieldEffectKind.Multi: return MultiStep(e) * Mathf.Max(1, e.Count) + FxMultiOne * FxTimeMul;
                 case FieldEffectKind.Trail: return Mathf.Max(0.1f, e.Duration) + FxAfter * FxTimeMul;
@@ -184,6 +187,8 @@ namespace TextSlayers
                     float da = e.Kind == FieldEffectKind.Zone ? 0.6f : 0.7f * (1f - t);
                     foreach (var sp in spots) DrawFx(fxDisc, e.Kind == FieldEffectKind.Shield ? follow : sp, R * 2.6f, new Color(0.02f, 0f, 0.06f), da);
                 }
+
+                if (DrawErnEffect(e, c, follow, unit, U, age, P)) continue;
 
                 switch (e.Kind)
                 {
@@ -269,6 +274,7 @@ namespace TextSlayers
                         break;
                     }
                     case FieldEffectKind.Slash:     // 짧은 베기
+                        if (IsFireSlash(e)) { DrawFireSlash(e, follow, unit, U, age); break; }
                         foreach (var sp in spots)
                         {
                             float ang = AngleOf(e.Dir) - 60f + 120f * Ease(t);
@@ -770,14 +776,31 @@ namespace TextSlayers
         static Vector2 Polar(float deg) => new Vector2(Mathf.Cos(deg * Mathf.Deg2Rad), Mathf.Sin(deg * Mathf.Deg2Rad));
 
         /// <summary>뒤로 젖혔다가 베고, 날이 지나간 자리에 잔상. 무기 모양은 종류별로 그린다.</summary>
+        const float OneHandReach = 1.86f;   // 손 → 칼끝 (U 단위)
+
+        static void DrawOneHandSword(Vector2 hand, float ang, float U, Color trail, float a)
+        {
+            Vector2 dir = Polar(ang);
+            float length = U * 1.55f, width = U * 0.22f;
+            DrawFxRect(Texture2D.whiteTexture, hand + dir * (U * 0.08f), U * 0.34f, U * 0.11f, WoodShaft, a, ang);
+            DrawFxRect(Texture2D.whiteTexture, hand + dir * (U * 0.27f), U * 0.1f, U * 0.52f, new Color(0.75f, 0.62f, 0.3f), a, ang);        // 코등이
+            Vector2 start = hand + dir * (U * 0.32f);
+            Vector2 mid = start + dir * (length * 0.42f);
+            DrawFxRect(fxLine, mid, length * 1.2f, width * 3.2f, trail, 0.7f * a, ang);                                          // 속성 기운
+            DrawFxRect(Texture2D.whiteTexture, mid, length * 0.84f, width, SteelBlade, a, ang);
+            DrawFxRect(Texture2D.whiteTexture, mid, length * 0.84f, width * 0.25f, Color.white, a, ang);
+            DrawFxRect(Diamond, start + dir * (length * 0.84f), length * 0.3f, width, SteelBlade, a, ang);
+        }
+
         static void DrawWeaponSwing(FieldEffect e, Vector2 c, float unit, float U, float age, Color main, Color light)
         {
             var w = WeaponOf(e);
             float duration = WeaponSwingTime(w);
             float t = Mathf.Min(1f, age / duration);
-            if (w == Weapon.GreatSword)     // 위에서 아래로 내려베기 + 잔흔 (사용자 2026-11-27)
+            var cleave = CleaveOf(e);       // 위에서 아래로 내려베기 + 잔흔 (사용자 2026-11-27)
+            if (cleave != null)
             {
-                DrawCleave(e, c, unit, U * WeaponScale, age, duration);
+                DrawCleave(cleave, e.Dir, c, unit, U * WeaponScale, age, main);
                 return;
             }
             float baseAng = AngleOf(e.Dir);
@@ -818,18 +841,8 @@ namespace TextSlayers
             switch (w)
             {
                 case Weapon.OneHand:
-                {
-                    float length = U * 1.55f, width = U * 0.22f;
-                    DrawFxRect(Texture2D.whiteTexture, hand + dir * (U * 0.08f), U * 0.34f, U * 0.11f, WoodShaft, a, ang);
-                    DrawFxRect(Texture2D.whiteTexture, hand + dir * (U * 0.27f), U * 0.1f, U * 0.52f, new Color(0.75f, 0.62f, 0.3f), a, ang);        // 코등이
-                    Vector2 start = hand + dir * (U * 0.32f);
-                    Vector2 mid = start + dir * (length * 0.42f);
-                    DrawFxRect(fxLine, mid, length * 1.2f, width * 3.2f, trail, 0.7f * a, ang);                                          // 속성 기운
-                    DrawFxRect(Texture2D.whiteTexture, mid, length * 0.84f, width, SteelBlade, a, ang);
-                    DrawFxRect(Texture2D.whiteTexture, mid, length * 0.84f, width * 0.25f, Color.white, a, ang);
-                    DrawFxRect(Diamond, start + dir * (length * 0.84f), length * 0.3f, width, SteelBlade, a, ang);
+                    DrawOneHandSword(hand, ang, U, trail, a);
                     break;
-                }
                 case Weapon.Halberd:
                 {
                     float length = U * 2.9f;

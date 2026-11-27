@@ -1,10 +1,14 @@
 // 게임용 이펙트 시트를 한 번에 내보내고, 프레임 표(C#)를 만든다.
 // 실행: node export_all.mjs <TextSlayersNew 경로>
-import { loadEffect, renderFrames, spriteSheet, save } from "./pixelfx/tools/lib/fxlib.mjs";
+import { loadEffect, renderFrames, save } from "./pixelfx/tools/lib/fxlib.mjs";
+import { packSheet } from "./pack.mjs";
 import { encodePNG } from "./pixelfx/tools/lib/png.mjs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { iceSpray, iceDebris, iceStuck } from "./mel_fx.mjs";
+import { fireSlash } from "./ern_fx.mjs";
+import { ernBuster, flameSlashes, fireTube } from "./ern2_fx.mjs";
+import { isoExplosion, isoSlam, isoLanding } from "./iso_fx.mjs";
 import { airBoom, iceFall, thrust, pileImpact } from "./vd_fx.mjs";
 import { wave, waveDust, darkPillar, spin, smashArc, stealOrb, stealStart, stealFeed } from "./stium_fx.mjs";
 
@@ -14,13 +18,12 @@ const VOID = ["#12061f", "#2a0f4a", "#4a1d7a", "#6e2fb0", "#9a52e0", "#c48cff", 
 
 // from~to: 잘라 쓸 초. center: 기준점을 보이는 영역의 가운데로 (머리 위 표시용)
 const SPECS = [
-  { key: "boom", fx: "explosions/small-explosion", to: 1.4, fps: 20, options: { size: 0.6, seed: 7 } },
-  { key: "boomDark", fx: "explosions/small-explosion", to: 1.4, fps: 20, options: { size: 0.6, seed: 7, palette: VOID, stone: "#2a1740" }, violet: true },
+  { key: "boom", make: () => isoExplosion(["#4a1712", "#c9281f", "#f2561d", "#ff8a2a", "#ffc23d", "#ffe26b", "#fff3a6", "#ffffff"], ["#4a4452", "#2e2a36"], "isoBoom"), to: 1.15, fps: 20 },
+  { key: "boomDark", make: () => isoExplosion(VOID, ["#3a2a52", "#211636"], "isoDark"), to: 1.15, fps: 20 },
   { key: "hit", fx: "impacts/crit-hit", to: 0.6, fps: 20, options: { palette: WHITE } },
-  { key: "slam", fx: "impacts/ground-slam", to: 1.2, fps: 18, options: { reach: 60 } },
-  { key: "landing", fx: "impacts/heavy-landing", to: 0.9, fps: 18 },
+  { key: "slam", make: () => isoSlam(["#4a1712", "#c9281f", "#f2561d", "#ff8a2a", "#ffc23d", "#ffe26b", "#fff3a6", "#ffffff"], ["#8a8294", "#5c556a", "#1a1622"], "isoSlam"), to: 1.2, fps: 18 },
+  { key: "landing", make: isoLanding, to: 0.9, fps: 18 },
   { key: "iceShatter", fx: "ice/ice-shatter", from: 0.7, to: 1.7, fps: 18 },
-  { key: "frostNova", fx: "ice/frost-nova", to: 1.6, fps: 16, options: { reach: 90 } },
   { key: "heal", fx: "holy/heal-aoe", to: 1.4, fps: 14, options: { reach: 34 } },
   { key: "shield", fx: "holy/divine-shield", to: 2.4, fps: 10, options: { palette: WHITE } },
   { key: "buff", fx: "holy/blessing", to: 1.5, fps: 12, options: { palette: WHITE } },
@@ -47,7 +50,14 @@ const SPECS = [
   { key: "iceStuck", make: iceStuck, to: 1.0, fps: 10, center: true },
   { key: "lightning", fx: "lightning/lightning-strike", from: 0.55, to: 1.5, fps: 24 },
   { key: "shieldBig", fx: "holy/divine-shield-big", to: 2.4, fps: 10, center: true },
-  { key: "darkSlam", fx: "impacts/ground-slam", to: 1.2, fps: 18, options: { reach: 80, palette: ["#1a0b33", "#3b1a66", "#6e2fb0", "#9a52e0", "#c48cff", "#ecd4ff", "#ffffff"], stone: "#6a3fa0" } },
+  { key: "cleaveErn", fx: "melee/cleave-ern", to: 0.65, fps: 30 },
+  { key: "fireSlash", make: fireSlash, to: 1.05, fps: 24 },
+  { key: "fireWide", make: () => fireSlash(-30, 168, 52, "fireWide"), to: 0.95, fps: 24 },
+  { key: "ernBuster", make: ernBuster, to: 1.2, fps: 20 },
+  { key: "fireTubeBack", make: () => fireTube(false), to: 0.45, fps: 20 },
+  { key: "fireTubeFront", make: () => fireTube(true), to: 0.45, fps: 20 },
+  { key: "flameSlashes", make: () => flameSlashes(2.1), to: 0.65, fps: 30 },
+  { key: "darkSlam", make: () => isoSlam(VOID, ["#7a5aa8", "#4c3378", "#140a22"], "isoDarkSlam"), to: 1.2, fps: 18 },
 ];
 
 const rows = [], shots = [];
@@ -76,14 +86,13 @@ for (const s of SPECS) {
     return d;
   };
   const cut = { ...r, w, h, n: frames.length, frames: frames.map((f) => ({ ...f, clear: crop(f.clear), color: crop(f.color) })) };
-  const sheet = spriteSheet(fx, cut, s.key), cols = sheet.json.meta.pixelfx.columns;
-  save(join(project, "Assets/Resources/FieldFx", `${s.key}.bytes`), sheet.png);
   const [ox, oy] = fx.meta.origin;
   const px = s.center ? Math.round(w / 2) : ox - x0, py = s.center ? Math.round(h / 2) : oy - y0;
-  const size = sheet.json.meta.size;
-  bytes += size.w * size.h * 4;
-  console.log(s.key, "frames", cut.n, "frame", w, h, "sheet", size.w, size.h);
-  rows.push(`            { "${s.key}", new FxSheet("${s.key}", ${cut.n}, ${cols}, ${w}, ${h}, ${px}, ${py}, ${s.playFps ?? s.fps}f) },   // ${s.fx ?? "stium_fx"}`);
+  const sheet = packSheet(cut.frames.map((f) => f.clear), w, h, px, py);   // 프레임마다 빈 곳을 잘라 담는다
+  save(join(project, "Assets/Resources/FieldFx", `${s.key}.bytes`), sheet.png);
+  bytes += sheet.width * sheet.height * 4;
+  console.log(s.key, "frames", cut.n, "sheet", sheet.width, sheet.height);
+  rows.push(`            { "${s.key}", new FxSheet(${s.playFps ?? s.fps}f, new short[] { ${sheet.rects.join(", ")} }) },   // ${s.fx ?? "custom"}`);
   shots.push(cut);
 }
 console.log("texture memory MB", (bytes / 1048576).toFixed(1));

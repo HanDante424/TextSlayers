@@ -39,7 +39,7 @@ namespace TextSlayers
             new FieldSkillDef { Id = "ern_fire_slash", KnockLevel = 2, Name = "파이어 슬래시", Shape = SkillShape.Target, Range = 1.8f,
                 Fx = FieldEffectKind.Slash, FxColor = SkillColor.Fire },
             new FieldSkillDef { Id = "ern_fire_stream", KnockLevel = 1, Name = "파이어 스트림", Shape = SkillShape.Dash, Range = 6f, Pierce = true,
-                Fx = FieldEffectKind.Trail, Fx2 = FieldEffectKind.Burst, Radius = 0.8f, FxColor = SkillColor.Fire },
+                Fx = FieldEffectKind.Trail, Fx2 = FieldEffectKind.Burst, Radius = 0.8f, FxColor = SkillColor.Fire, DashSpeedMul = 0.75f },   // 화염 폭풍을 휘감고 이동 [임시]
             new FieldSkillDef { Id = "ern_fire_buster", KnockLevel = 3, Name = "파이어 버스터", Shape = SkillShape.Around, Radius = 2.5f, Stun = 1f,
                 Fx = FieldEffectKind.Pulse, Fx2 = FieldEffectKind.Burst, FxColor = SkillColor.Fire },
             new FieldSkillDef { Id = "ern_fire_execution", Name = "파이어 엑스큐션", Shape = SkillShape.Around, Radius = 2f, Hits = 10, Root = 2f, FxTime = 2f,
