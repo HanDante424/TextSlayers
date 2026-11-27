@@ -88,7 +88,7 @@ namespace TextSlayers
             GUI.matrix = previousMatrix;
         }
 
-        // ───────── 근접 무기 내려베기 (사용자 2026-11-27: 모든 근거리 무기가 이 방식. 지금은 스티움 · 에른 · 메일 · 요월 · 라바다) ─────────
+        // ───────── 근접 무기 내려베기 (사용자 2026-11-27: 모든 근거리 무기가 이 방식. 지금은 스티움 · 에른 · 메일 · 요월 · 라바다 · 레온하르트) ─────────
         // 머리 뒤에서 위로 넘겨 내려베고(-115° → +80°), 초승달 잔흔이 꼬리부터 흩어진다.
         // 값은 시트를 만든 값과 같아야 무기가 잔흔을 따라간다. 좌표는 발 위치 기준 도트, 오른쪽을 볼 때.
 
@@ -119,6 +119,9 @@ namespace TextSlayers
         // 라바다 장십자 지팡이 (사용자 2026-11-27): 크기는 에른, 속도는 스티움, 호는 두껍게, 금빛 [임시]. 좌우 대칭이라 뒤집지 않는다
         static readonly CleaveStyle LavadaCleave = new CleaveStyle { Sheet = "cleaveLavada", CenterX = -22f, Radius = 88f, Wind = 0.04f, Sweep = 0.16f, WeaponTime = 0.51f, WeaponSprite = "lavada_staff", GripY = 32f };
 
+        // 레온하르트 사자왕의 석대검 (사용자 2026-11-27): 크기는 에른, 속도는 스티움, 호는 가장 두껍게, 상아 · 금색 [임시]
+        static readonly CleaveStyle LeonCleave = new CleaveStyle { Sheet = "cleaveLeon", CenterX = -22f, Radius = 88f, Wind = 0.04f, Sweep = 0.16f, WeaponTime = 0.51f, WeaponSprite = LionSword, GripY = LionSwordGripY, OneSided = true };   // 뒤집어 사자 부조를 바로 세운다
+
         // 파이어 슬래시 (사용자 2026-11-27): 기본 공격 동작에 화염 파티클을 아주 많이
         static readonly CleaveStyle FireSlashCleave = new CleaveStyle { Sheet = "fireSlash", CenterX = -22f, Radius = 104f, Wind = 0.03f, Sweep = 0.13f, WeaponTime = 0.45f, WeaponSprite = "ern_sword_flame" };   // [임시]
 
@@ -131,7 +134,7 @@ namespace TextSlayers
         static CleaveStyle CleaveOf(FieldEffect e)
         {
             var weapon = WeaponOf(e);
-            if (weapon == Weapon.GreatSword) return StiumCleave;
+            if (weapon == Weapon.GreatSword) return IsLeon(e) ? LeonCleave : StiumCleave;
             if (weapon == Weapon.Halberd) return MailCleave;
             if (weapon == Weapon.Katana) return YowolCleave;
             if (weapon == Weapon.Cross) return LavadaCleave;

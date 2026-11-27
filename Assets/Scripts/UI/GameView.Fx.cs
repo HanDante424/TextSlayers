@@ -597,6 +597,15 @@ namespace TextSlayers
 
             DrawWaveRemnants(b, unit, P);
 
+            // 감아오기: 대상을 문 족쇄와 펜리르까지의 사슬
+            foreach (var u in b.Players)
+                if (u.Alive && u.Reeled != null && u.Reeled.Alive)
+                {
+                    Vector2 hand = P(u.Pos), bite = P(u.Reeled.Pos);
+                    if (!DrawShackleChain(hand, bite, u.Facing, unit))
+                        DrawChain(hand, bite, U, SkillColor.Steel, Light(SkillColor.Steel), 1f);
+                }
+
             // 투사체 (모양: 아치 · 구체 · 탄환 · 화살 · 부적 · 얼음 조각 · 포션)
             foreach (var p in b.Projectiles)
             {
@@ -604,7 +613,12 @@ namespace TextSlayers
                 Color main = p.Skill.FxColor, light = Light(main);
                 float ang = AngleOf(p.Dir);
                 Vector2 pos = P(p.Pos);
-                if (p.Skill.Id == "fr_chain" && p.Source.Alive) DrawChain(P(p.Source.Pos), pos, U, main, light, 1f);
+                if (p.Skill.Id == "fr_chain")             // 족쇄의 사슬: 도트 (읽지 못하면 아래의 도형 사슬 + 구체)
+                {
+                    Vector2 hand = p.Source.Alive ? P(p.Source.Pos) : pos;
+                    if (DrawShackleChain(hand, pos, p.Dir, unit)) continue;
+                    DrawChain(hand, pos, U, main, light, 1f);
+                }
                 if (p.Skill.Id == "stium_darkwave")      // 어둠의 검기: 반복 재생하는 초승달
                 {
                     DrawSheet("darkWave", pos, unit, b.Time, Color.white, false, true, ang);
@@ -749,9 +763,9 @@ namespace TextSlayers
             if ((BasicKind)e.Count == BasicKind.Glutton || e.Source == null || e.Source.Def == null) return Weapon.None;
             switch (e.Source.Def.Id)
             {
-                case "stium": return Weapon.GreatSword;
+                case "stium":
+                case "c38": return Weapon.GreatSword;   // 레온하르트: 사자왕의 석대검 (사용자 2026-11-27)
                 case "ern":                 // 에른
-                case "c38":                 // 레온하르트
                 case "c41":                 // 사하라
                 case "c48": return Weapon.OneHand;   // 가니악
                 case "c06": return Weapon.Halberd;   // 메일
