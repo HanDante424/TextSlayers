@@ -72,6 +72,9 @@ namespace TextSlayers
                 Fx2 = FieldEffectKind.IceShatter, Radius = 0.6f, FxColor = SkillColor.Ice },
             new FieldSkillDef { Pistol = true, Id = "vd_pierce", KnockLevel = 1, Name = "관통탄", Shape = SkillShape.Projectile, Range = 12f, Shot = ShotStyle.Bullet, Shots = 3, Pierce = true,
                 Fx2 = FieldEffectKind.Burst, Radius = 0.5f, FxColor = SkillColor.Steel },
+            // 철갑탄 패시브: 권총 특수탄 스킬 뒤에 한 발 더 나가는 탄 (사용자 2026-11-27). 넉백 3 · 기절 1초 (컨셉 문서). 피해 수치 미정
+            new FieldSkillDef { Pistol = true, Id = "vd_ap_shot", Name = "철갑탄", Shape = SkillShape.Projectile, Range = 9f, Shot = ShotStyle.Bullet,
+                KnockLevel = 3, Stun = 1f, Fx2 = FieldEffectKind.Burst, Radius = 0.6f, FxColor = SkillColor.Gold, Quiet = true },
             new FieldSkillDef { Id = "vd_pilebunker", KnockLevel = 4, Name = "파일벙커 / 벙커버스터", Shape = SkillShape.Dash, Range = 7f, DashReturn = true,
                 ImpactCone = true, Fx = FieldEffectKind.Trail, Fx2 = FieldEffectKind.Burst, Radius = 0.9f, FollowUp = "vd_bunkerbuster", FollowDelay = 0.6f,
                 FxColor = SkillColor.Steel },

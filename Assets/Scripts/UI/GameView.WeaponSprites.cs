@@ -54,6 +54,24 @@ namespace TextSlayers
             return texture;
         }
 
+        /// <summary>WeaponTexture 를 위아래로 뒤집은 것.</summary>
+        static Texture2D UpsideDownWeaponTexture(string name)
+        {
+            string key = name + " upside down";
+            if (weaponTextures.TryGetValue(key, out var texture)) return texture;
+            var source = WeaponTexture(name);
+            if (source != null)
+            {
+                var pixels = source.GetPixels32();
+                var flipped = new Color32[pixels.Length];
+                int w = source.width, h = source.height;
+                for (int y = 0; y < h; y++) System.Array.Copy(pixels, y * w, flipped, (h - 1 - y) * w, w);
+                texture = MakeFieldSpriteMask(key, flipped);
+            }
+            weaponTextures.Add(key, texture);
+            return texture;
+        }
+
         /// <summary>손 위치 hand 에서 angleDeg 방향으로 무기 도트를 그린다. size = 도트 한 칸의 UI 크기.</summary>
         static void DrawSwordSprite(Texture2D texture, Vector2 hand, float angleDeg, float size, float alpha, float gripY = SwordGripY)
         {
