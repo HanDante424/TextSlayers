@@ -52,6 +52,8 @@ const SPECS = [
   { key: "shieldBig", fx: "holy/divine-shield-big", to: 2.4, fps: 10, center: true },
   { key: "cleaveErn", fx: "melee/cleave-ern", to: 0.65, fps: 30 },
   { key: "cleaveMail", fx: "melee/cleave-mail", to: 1.0, fps: 30 },
+  { key: "cleaveYowol", fx: "melee/cleave-yowol", to: 0.65, fps: 30 },
+  { key: "cleaveLavada", fx: "melee/cleave-lavada", to: 1.0, fps: 30 },
   { key: "fireSlash", make: fireSlash, to: 1.05, fps: 24 },
   { key: "fireWide", make: () => fireSlash(-30, 168, 52, "fireWide"), to: 0.95, fps: 24 },
   { key: "ernBuster", make: ernBuster, to: 1.2, fps: 20 },

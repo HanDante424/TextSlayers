@@ -228,6 +228,7 @@ namespace TextSlayers
         public const float FlankCloseX = 2f;           // 목표와 x 가 이 안으로 들어오면 우회 종료
         public const float ApproachRatio = 0.9f;       // 사거리의 이 비율까지 접근
         public const float PlayerStartX = 2f;
+        public const float PlayerStartStagger = 1f;    // 아군 시작 위치: 한 명씩 번갈아 앞으로 나오는 거리
         public const float EnemyStartX = 18f;
         public const float WaveInterval = 2f;
         public const float TimeLimit = 300f;           // 이 시간 넘으면 패배(멈춤 방지)

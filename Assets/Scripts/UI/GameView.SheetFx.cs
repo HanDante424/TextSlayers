@@ -88,7 +88,7 @@ namespace TextSlayers
             GUI.matrix = previousMatrix;
         }
 
-        // ───────── 근접 무기 내려베기 (사용자 2026-11-27: 모든 근거리 무기가 이 방식. 지금은 스티움 · 에른 · 메일) ─────────
+        // ───────── 근접 무기 내려베기 (사용자 2026-11-27: 모든 근거리 무기가 이 방식. 지금은 스티움 · 에른 · 메일 · 요월 · 라바다) ─────────
         // 머리 뒤에서 위로 넘겨 내려베고(-115° → +80°), 초승달 잔흔이 꼬리부터 흩어진다.
         // 값은 시트를 만든 값과 같아야 무기가 잔흔을 따라간다. 좌표는 발 위치 기준 도트, 오른쪽을 볼 때.
 
@@ -113,6 +113,12 @@ namespace TextSlayers
         // 메일 할버드 (사용자 2026-11-27): 크기 · 속도는 스티움과 같고 색만 강철색 [임시]
         static readonly CleaveStyle MailCleave = new CleaveStyle { Sheet = "cleaveMail", CenterX = -32f, Radius = 129f, Wind = 0.04f, Sweep = 0.16f, WeaponTime = 0.51f, WeaponSprite = "mail_halberd", WeaponZoom = 2f, GripY = 30f, OneSided = true };
 
+        // 요월 달빛 검 (사용자 2026-11-27): 크기 · 속도는 에른과 같고 호는 가늘게, 달빛 색 [임시]
+        static readonly CleaveStyle YowolCleave = new CleaveStyle { Sheet = "cleaveYowol", CenterX = -22f, Radius = 88f, Wind = 0.03f, Sweep = 0.11f, WeaponTime = 0.36f, WeaponSprite = "yowol_sword", GripY = 28f, OneSided = true };
+
+        // 라바다 장십자 지팡이 (사용자 2026-11-27): 크기는 에른, 속도는 스티움, 호는 두껍게, 금빛 [임시]. 좌우 대칭이라 뒤집지 않는다
+        static readonly CleaveStyle LavadaCleave = new CleaveStyle { Sheet = "cleaveLavada", CenterX = -22f, Radius = 88f, Wind = 0.04f, Sweep = 0.16f, WeaponTime = 0.51f, WeaponSprite = "lavada_staff", GripY = 32f };
+
         // 파이어 슬래시 (사용자 2026-11-27): 기본 공격 동작에 화염 파티클을 아주 많이
         static readonly CleaveStyle FireSlashCleave = new CleaveStyle { Sheet = "fireSlash", CenterX = -22f, Radius = 104f, Wind = 0.03f, Sweep = 0.13f, WeaponTime = 0.45f, WeaponSprite = "ern_sword_flame" };   // [임시]
 
@@ -127,6 +133,8 @@ namespace TextSlayers
             var weapon = WeaponOf(e);
             if (weapon == Weapon.GreatSword) return StiumCleave;
             if (weapon == Weapon.Halberd) return MailCleave;
+            if (weapon == Weapon.Katana) return YowolCleave;
+            if (weapon == Weapon.Cross) return LavadaCleave;
             return weapon == Weapon.OneHand && e.Source.Def.Id == "ern" ? ErnCleave : null;
         }
 

@@ -11,6 +11,8 @@ namespace TextSlayers
         const float FieldSpriteMarginRatio = (float)FieldSpriteVerticalMargin / FieldSpriteCanvasSize;
         const float FieldSpriteScale = 1.5f;  // [임시] 몸통 지름 대비 목표 크기 (실제 크기는 정수배로 맞춘다)
         const int FieldSpriteOutlineRadius = 2; // [임시] 원본 픽셀 단위
+        const string FireArmSpriteSuffix = "_firearm"; // 화염의 팔 상태 전용 도트: <ID>_firearm
+        const string MoonSpriteSuffix = "_moon";       // 월영 상태 전용 도트: <ID>_moon
 
         static readonly Color FieldSpriteOutline = new Color(0.55f, 0.67f, 0.83f, 0.72f); // [임시]
         static readonly Rect FieldSpriteUv = new Rect(0f, 0f, 1f, 1f);
@@ -22,6 +24,17 @@ namespace TextSlayers
             public Texture2D Art;
             public Texture2D Outline;
             public Texture2D Silhouette;
+            public bool FormArt;           // 변신 모습이 직접 그려진 도트 (상태 색조 · 덧그림을 생략한다)
+        }
+
+        /// <summary>유닛의 지금 모습에 맞는 도트. 변신(화염의 팔 · 월영) 전용 도트가 없으면 기본 도트.</summary>
+        static FieldSprite UnitFieldSprite(FieldUnit u)
+        {
+            string id = u.Def?.Id;
+            var sprite = GetFieldSprite(id);
+            string suffix = u.FireArm ? FireArmSpriteSuffix : u.MoonShadow ? MoonSpriteSuffix : null;
+            if (sprite == null || suffix == null) return sprite;
+            return GetFieldSprite(id + suffix) ?? sprite;
         }
 
         static FieldSprite GetFieldSprite(string id)
@@ -50,6 +63,7 @@ namespace TextSlayers
                     sprite = new FieldSprite
                     {
                         Art = art,
+                        FormArt = id.EndsWith(FireArmSpriteSuffix) || id.EndsWith(MoonSpriteSuffix),
                         Outline = MakeFieldSpriteMask(id + " outline", outline),
                         Silhouette = MakeFieldSpriteMask(id + " silhouette", silhouette)
                     };
@@ -123,8 +137,8 @@ namespace TextSlayers
             PaintFieldSprite(rect, sprite.Outline, faceLeft, outline);
             Color tint = Color.white;
             if (u.Glutton) tint = GluttonBody;
-            if (u.MoonShadow) tint = ShadowBody;
-            if (u.FireArm) tint = Color.Lerp(tint, SkillColor.Fire, 0.45f);
+            if (u.MoonShadow && !sprite.FormArt) tint = ShadowBody;
+            if (u.FireArm && !sprite.FormArt) tint = Color.Lerp(tint, SkillColor.Fire, 0.45f);
             PaintFieldSprite(rect, sprite.Art, faceLeft, tint);
             if (flash > 0f) PaintFieldSprite(rect, sprite.Silhouette, faceLeft, new Color(1f, 1f, 1f, 0.7f * flash));
         }
