@@ -702,6 +702,9 @@ v0.1 의 7종에서 **MP 를 쓰지 않고**(`[해석]` 쿨다운으로 대체) 
 | 라바다 | [Lavada_PixelLab_64.png](Lavada_PixelLab_64.png) |
 | 레온하르트 | [Leonhardt_PixelLab_64.png](Leonhardt_PixelLab_64.png) |
 | 펜리르 | [Fenrir_PixelLab_64.png](Fenrir_PixelLab_64.png) |
+| 사하라 | [Sahara_PixelLab_64.png](Sahara_PixelLab_64.png) |
+| 니그레도 | [Nigredo_PixelLab_64.png](Nigredo_PixelLab_64.png) |
+| 가니악 | [Ganiak_PixelLab_64.png](Ganiak_PixelLab_64.png) |
 
 | 항목 | 제작 기준 |
 |---|---|

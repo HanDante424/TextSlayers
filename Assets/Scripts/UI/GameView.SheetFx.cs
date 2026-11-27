@@ -88,7 +88,7 @@ namespace TextSlayers
             GUI.matrix = previousMatrix;
         }
 
-        // ───────── 근접 무기 내려베기 (사용자 2026-11-27: 모든 근거리 무기가 이 방식. 지금은 스티움 · 에른 · 메일 · 요월 · 라바다 · 레온하르트) ─────────
+        // ───────── 근접 무기 내려베기 (사용자 2026-11-27: 모든 근거리 무기가 이 방식. 지금은 스티움 · 에른 · 메일 · 요월 · 라바다 · 레온하르트 · 사하라 · 가니악) ─────────
         // 머리 뒤에서 위로 넘겨 내려베고(-115° → +80°), 초승달 잔흔이 꼬리부터 흩어진다.
         // 값은 시트를 만든 값과 같아야 무기가 잔흔을 따라간다. 좌표는 발 위치 기준 도트, 오른쪽을 볼 때.
 
@@ -101,7 +101,7 @@ namespace TextSlayers
             public float CenterX, Radius;        // 호의 중심(몸 뒤쪽)과 반지름
             public float Wind, Sweep;            // 시트의 준비 · 휘두르는 시간
             public float WeaponTime;             // 무기를 보여 주는 시간
-            public string WeaponSprite;          // 오른쪽을 향한 무기 도트 이름 (없으면 도형 · 대검)
+            public string WeaponSprite;          // 오른쪽을 향한 무기 도트 이름 (스티움은 비워 두고 대검 도트)
             public float WeaponZoom = 1f;        // 무기 도트 배율
             public float GripY = ErnSwordGripY;  // 무기 도트의 자루 가로축 (위에서부터 도트)
             public bool OneSided;                // 날이 한쪽(아래)에만 있는 무기: 왼쪽을 볼 때 위아래를 뒤집는다
@@ -122,6 +122,12 @@ namespace TextSlayers
         // 레온하르트 사자왕의 석대검 (사용자 2026-11-27): 크기는 에른, 속도는 스티움, 호는 가장 두껍게, 상아 · 금색 [임시]
         static readonly CleaveStyle LeonCleave = new CleaveStyle { Sheet = "cleaveLeon", CenterX = -22f, Radius = 88f, Wind = 0.04f, Sweep = 0.16f, WeaponTime = 0.51f, WeaponSprite = LionSword, GripY = LionSwordGripY, OneSided = true };   // 뒤집어 사자 부조를 바로 세운다
 
+        // 사하라 환도 (사용자 2026-11-27, 검집은 쓰지 않음): 크기 · 속도는 에른, 호는 가장 가늘게, 부적 청록 [임시]
+        static readonly CleaveStyle SaharaCleave = new CleaveStyle { Sheet = "cleaveSahara", CenterX = -22f, Radius = 88f, Wind = 0.03f, Sweep = 0.11f, WeaponTime = 0.36f, WeaponSprite = SaharaSword, GripY = SaharaSwordGripY, OneSided = true };
+
+        // 가니악 흑강 장검 (사용자 2026-11-27): 크기 · 속도는 에른, 심연 진홍 [임시]. 좌우 대칭이라 뒤집지 않는다
+        static readonly CleaveStyle GaniakCleave = new CleaveStyle { Sheet = "cleaveGaniak", CenterX = -22f, Radius = 88f, Wind = 0.03f, Sweep = 0.11f, WeaponTime = 0.36f, WeaponSprite = "ganiak_sword", GripY = 32f };
+
         // 파이어 슬래시 (사용자 2026-11-27): 기본 공격 동작에 화염 파티클을 아주 많이
         static readonly CleaveStyle FireSlashCleave = new CleaveStyle { Sheet = "fireSlash", CenterX = -22f, Radius = 104f, Wind = 0.03f, Sweep = 0.13f, WeaponTime = 0.45f, WeaponSprite = "ern_sword_flame" };   // [임시]
 
@@ -130,7 +136,7 @@ namespace TextSlayers
         static void DrawFireSlash(FieldEffect e, Vector2 caster, float unit, float U, float age)
             => DrawCleave(FireSlashCleave, e.Dir, caster + e.Dir * (unit * SwingReachAhead), unit, U * WeaponScale, age, SkillColor.Fire);
 
-        /// <summary>이 기본 공격에 쓰는 내려베기. 아직 적용하지 않은 무기는 null.</summary>
+        /// <summary>이 기본 공격에 쓰는 내려베기. 무기를 든 캐릭터는 모두 이 방식이고, 무기가 없으면 null.</summary>
         static CleaveStyle CleaveOf(FieldEffect e)
         {
             var weapon = WeaponOf(e);
@@ -138,7 +144,9 @@ namespace TextSlayers
             if (weapon == Weapon.Halberd) return MailCleave;
             if (weapon == Weapon.Katana) return YowolCleave;
             if (weapon == Weapon.Cross) return LavadaCleave;
-            return weapon == Weapon.OneHand && e.Source.Def.Id == "ern" ? ErnCleave : null;
+            if (weapon != Weapon.OneHand) return null;
+            if (IsSahara(e)) return SaharaCleave;
+            return e.Source.Def.Id == "c48" ? GaniakCleave : ErnCleave;
         }
 
         /// <summary>
@@ -195,11 +203,6 @@ namespace TextSlayers
             {
                 float size = CleaveSwordZoom * pixel;
                 DrawSwordSprite(sword, pivot + toTip.normalized * (toTip.magnitude - SwordReach * size), AngleOf(toTip), size, alpha);
-            }
-            else                           // 도트가 아직 없는 한손검은 도형 (손 → 칼끝 1.86U)
-            {
-                float reach = U * OneHandReach;
-                DrawOneHandSword(pivot + toTip.normalized * Mathf.Max(0f, toTip.magnitude - reach), AngleOf(toTip), U, trail, alpha);
             }
         }
 
