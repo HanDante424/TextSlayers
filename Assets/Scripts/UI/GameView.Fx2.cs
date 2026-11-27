@@ -420,10 +420,20 @@ namespace TextSlayers
                     Vector2 at = Vector2.Lerp(back, planted, fall);
                     at.y -= Mathf.Sin(fall * Mathf.PI) * unit * 1.6f;
                     float spin = (1f - fall) * -120f * side;
+                    var caseTexture = WeaponTexture("vendetta_case");
                     float cw = unit * 0.55f, ch = unit * 1.35f;
-                    DrawFxRect(Texture2D.whiteTexture, at, cw, ch, new Color(0.35f, 0.33f, 0.3f), ca, spin);
-                    DrawFxRect(Texture2D.whiteTexture, at, cw * 0.18f, ch * 0.92f, new Color(0.65f, 0.58f, 0.45f), ca, spin);
-                    DrawFxRect(Texture2D.whiteTexture, at, cw * 1.05f, ch * 0.1f, new Color(0.55f, 0.5f, 0.4f), ca, spin);
+                    if (caseTexture != null)
+                    {
+                        float pixel = FieldPixelSize(unit);
+                        ch = CaseHeight * pixel;                       // 발사구 · 착지 위치를 도트 크기에 맞춘다
+                        DrawCaseSprite(caseTexture, at, pixel, spin, ca);
+                    }
+                    else
+                    {
+                        DrawFxRect(Texture2D.whiteTexture, at, cw, ch, new Color(0.35f, 0.33f, 0.3f), ca, spin);
+                        DrawFxRect(Texture2D.whiteTexture, at, cw * 0.18f, ch * 0.92f, new Color(0.65f, 0.58f, 0.45f), ca, spin);
+                        DrawFxRect(Texture2D.whiteTexture, at, cw * 1.05f, ch * 0.1f, new Color(0.55f, 0.5f, 0.4f), ca, spin);
+                    }
                     if (age > FxCasePlant && age < FxCasePlant + 0.35f)      // 내려박는 충격 · 갈라진 바닥
                     {
                         float q = (age - FxCasePlant) / 0.35f;

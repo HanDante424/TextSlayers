@@ -200,6 +200,8 @@ namespace TextSlayers
         public float LastHitTime = -99f;      // 피격 번쩍임 (화면)
         public int Ammo;                      // 총잡이 기본탄
         public float ReloadTimer;             // 장전 중 (기본탄 · 특수탄 불가)
+        public bool LoadingSpecial;           // 지금 장전이 특수탄인가 (끝나도 기본탄은 채우지 않는다)
+        public float LastShotTime = -10f;     // 마지막으로 총을 쏜 시각 (화면의 반동)
         public int DarkErosion;               // 어둠 잠식 (스티움, 최대 10, 저항력 -1 / 1)
         public bool AppliesErosion;           // 어둠 거두기 장착
         public float CounterTimer;            // 카운터 자세 (아무것도 안 함, 피격 시 반격)
@@ -298,6 +300,7 @@ namespace TextSlayers
         const float GluttonRange = 1.5f;          // 글러트니: 근거리
         public const int GunnerAmmo = 6;          // 기본탄 장탄수 (벤데타 대구경 탄두 6)
         public const float ReloadTime = 2f;       // 장전 시간 (사용자 2026-11-26 임시 2초)
+        public const float SpecialReloadTime = 0.5f;   // 특수탄은 빠르게 장전 (사용자 2026-11-27)
         const int MaxErosion = 10;
         const float ErosionDamagePerStack = 0.01f; // 어둠 거두기: 잠식 1당 최대 체력 1%
         const float HarvestHealRatio = 0.5f;
@@ -687,7 +690,12 @@ namespace TextSlayers
             if (u.ReloadTimer > 0f)
             {
                 u.ReloadTimer -= dt;
-                if (u.ReloadTimer <= 0f) { u.ReloadTimer = 0f; u.Ammo = GunnerAmmo; }
+                if (u.ReloadTimer <= 0f)
+                {
+                    u.ReloadTimer = 0f;
+                    if (u.LoadingSpecial) u.LoadingSpecial = false;   // 특수탄 장전 끝: 남은 기본탄은 그대로
+                    else u.Ammo = GunnerAmmo;
+                }
             }
             if (u.PushTimer > 0f) PushStep(u, dt);
             u.ActionTimer = Mathf.Max(0f, u.ActionTimer - dt);
@@ -1193,10 +1201,12 @@ namespace TextSlayers
                 var s = u.Skills[i];
                 if (s.Pistol)
                 {
-                    // 특수탄: 장전만 해 두고 다음 기본 공격들이 특수탄으로 나간다 (기본 공격 속도, 사용자 2026-11-26)
+                    // 특수탄: 0.5초 장전한 뒤(사용자 2026-11-27), 다음 기본 공격들이 특수탄으로 나간다 (사용자 2026-11-26)
                     if (u.ReloadTimer > 0f || u.SpecialAmmo > 0 || Vector2.Distance(u.Pos, target.Pos) > s.Range) continue;
                     u.SpecialSkill = s;
                     u.SpecialAmmo = Mathf.Max(1, s.Shots);
+                    u.ReloadTimer = SpecialReloadTime;
+                    u.LoadingSpecial = true;
                     u.Cooldowns[i] = s.EffectiveCooldown;
                     AfterSkill(u, i, s);
                     Emit(FieldEventKind.Skill, u, null, 0, false, $"{s.Name} 장전");
@@ -1219,6 +1229,7 @@ namespace TextSlayers
                 if (dir.sqrMagnitude > 0.0001f) u.Facing = dir.normalized;
                 Projectiles.Add(new FieldProjectile { Pos = u.Pos, Dir = u.Facing, Left = sp.Range + 1f, Source = u, Skill = sp });
                 u.SpecialAmmo--;
+                u.LastShotTime = Time;
                 AddIgnite(u, IgniteBasic);
                 return true;
             }
@@ -1245,7 +1256,11 @@ namespace TextSlayers
                     if (e != null) { e.Count = (int)u.Basic; e.End = target.Pos; }
                 }
             }
-            if (u.Def != null && u.Def.Gunner && --u.Ammo <= 0) { u.Ammo = 0; u.ReloadTimer = ReloadTime; }
+            if (u.Def != null && u.Def.Gunner)
+            {
+                u.LastShotTime = Time;
+                if (--u.Ammo <= 0) { u.Ammo = 0; u.ReloadTimer = ReloadTime; u.LoadingSpecial = false; }
+            }
             AddIgnite(u, IgniteBasic);
             return true;
         }

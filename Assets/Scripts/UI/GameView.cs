@@ -658,7 +658,7 @@ namespace TextSlayers
             if (u.Def != null && u.Def.ShowWeapons)
             {
                 float side = u.Facing.x >= 0f ? 1f : -1f;
-                if (now >= u.CaseDownUntil)     // 케이스를 내려박은 동안에는 등에 없다
+                if (now >= u.CaseDownUntil && (sprite == null || !DrawBackCase(spriteRect, faceLeft)))   // 케이스를 내려박은 동안에는 등에 없다
                 {
                     Fill(new Rect(cx - side * d * 0.55f - d * 0.22f, cy - d * 0.45f, d * 0.44f, d * 0.8f), new Color(0.35f, 0.33f, 0.3f));   // 케이스
                     Fill(new Rect(cx - side * d * 0.55f - d * 0.18f, cy - d * 0.4f, d * 0.36f, d * 0.08f), new Color(0.6f, 0.55f, 0.45f));
@@ -684,7 +684,6 @@ namespace TextSlayers
             if (u.Glutton) bodyColor = GluttonBody;          // 글러트니: 회색
             if (u.MoonShadow) bodyColor = ShadowBody;        // 월영: 검은색으로 뒤덮임
             if (u.FireArm) bodyColor = Color.Lerp(bodyColor, SkillColor.Fire, 0.45f);
-            var nameRect = body;
             if (sprite == null)
             {
                 Fill(body, bodyColor);
@@ -693,9 +692,7 @@ namespace TextSlayers
             else
             {
                 DrawFieldSprite(sprite, spriteRect, faceLeft, u, flash);
-                if (u.Def != null && u.Def.ShowWeapons) DrawVendettaPistol(spriteRect, faceLeft);
-                nameRect.height = small.lineHeight;
-                nameRect.y = FieldSpriteHead(spriteRect) - nameRect.height;
+                if (u.Def != null && u.Def.ShowWeapons) DrawVendettaPistol(spriteRect, faceLeft, u, now);
             }
             if (u.Immortal)   // 테스트 더미: 전술 한 글자 (돌 · 침 · 견 · 후)
                 GUI.Label(new Rect(cx - 20, body.y - 15, 40, 14), $"<size=11><color=#ffd76a>{StrategyMark(u.Strategy)}</color></size>", small);
@@ -712,8 +709,7 @@ namespace TextSlayers
             var bar = new Rect(body.x, body.yMax + 2, d, 5);
             Fill(bar, BarBack);
             Fill(new Rect(bar.x, bar.y, bar.width * (u.Immortal ? 1f : u.HpRatio), bar.height), u.IsPlayer ? AllyHpColor : EnemyHpColor);
-            if (sprite != null && nameRect.y < field.y) nameRect.y = bar.yMax;
-            GUI.Label(nameRect, ShortName(u), small);
+            if (sprite == null) GUI.Label(body, ShortName(u), small);   // 도트가 있는 캐릭터는 이름을 쓰지 않는다 (사용자 2026-11-27)
 
             // 총잡이: 장전 막대 (장전 중) · 남은 기본탄
             if (u.Def != null && u.Def.Gunner)
@@ -722,8 +718,14 @@ namespace TextSlayers
                 if (u.ReloadTimer > 0f)
                 {
                     Fill(rb, BarBack);
-                    Fill(new Rect(rb.x, rb.y, rb.width * (1f - u.ReloadTimer / FieldBattle.ReloadTime), rb.height), ReloadColor);
+                    Fill(new Rect(rb.x, rb.y, rb.width * (1f - u.ReloadTimer / (u.LoadingSpecial ? FieldBattle.SpecialReloadTime : FieldBattle.ReloadTime)), rb.height), ReloadColor);
                     GUI.Label(new Rect(cx - 30, rb.yMax, 60, 16), "<size=12><color=#ffcc55>장전</color></size>", small);
+                }
+                else if (u.SpecialAmmo > 0 && u.SpecialSkill != null)
+                {
+                    // 특수탄이 장전돼 있으면 특수탄 수를 그 탄의 색으로 (사용자 2026-11-27)
+                    float pip = d / Mathf.Max(1, u.SpecialSkill.Shots);
+                    for (int i = 0; i < u.SpecialAmmo; i++) Fill(new Rect(rb.x + i * pip + 1, rb.y, pip - 2, rb.height), u.SpecialSkill.FxColor);
                 }
                 else
                 {
