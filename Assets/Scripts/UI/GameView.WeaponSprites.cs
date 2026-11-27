@@ -72,6 +72,52 @@ namespace TextSlayers
             return texture;
         }
 
+        // 펜리르 족쇄의 사슬 (사용자 2026-11-27): 날아가는 끝은 족쇄 입, 나머지는 고리.
+        // 게임용은 원본(Docs/Design/Fenrir_Shackle_Jaw_64 · Ring_64)을 절반으로 줄인 32×32. 입은 오른쪽을 향하고, 고리는 긴 쪽이 가로.
+        const int ShackleCanvas = 32;
+        const float ShackleJawBack = 11f;      // 입의 중심 → 사슬이 이어지는 경첩 (도트)
+        const float ShackleLinkStep = 13f;     // 고리 중심 간격 (도트) [임시]
+        const float ShackleEdgeRatio = 0.35f;  // 하나 걸러 옆으로 선 고리: 납작하게 [임시]
+
+        /// <summary>from(시전자)에서 head(족쇄 입의 중심)까지 사슬을 그린다. 도트를 읽지 못하면 false.</summary>
+        static bool DrawShackleChain(Vector2 from, Vector2 head, Vector2 flightDir, float unit)
+        {
+            var jaw = WeaponTexture("fenrir_jaw");
+            var ring = WeaponTexture("fenrir_ring");
+            if (jaw == null || ring == null) return false;
+
+            float pixel = FieldPixelSize(unit), size = ShackleCanvas * pixel;
+            Vector2 span = head - from;
+            Vector2 dir = span.magnitude > 1f ? span.normalized : flightDir.normalized;
+            float angle = AngleOf(dir);
+            Vector2 hinge = head - dir * (ShackleJawBack * pixel);
+            float length = Vector2.Dot(hinge - from, dir), step = ShackleLinkStep * pixel;
+
+            // 고리는 입 쪽부터 센다: 사슬이 입에 끌려 시전자에게서 풀려 나온다. 옆으로 선 고리가 위에 겹친다.
+            for (int pass = 0; pass < 2; pass++)
+            {
+                int k = 0;
+                for (float back = step * 0.5f; back < length; back += step, k++)
+                    if (k % 2 == pass)
+                        DrawFxRect(ring, hinge - dir * back, size, pass == 0 ? size : size * ShackleEdgeRatio, Color.white, 1f, angle);
+            }
+            DrawFxRect(jaw, head, size, size, Color.white, 1f, angle);
+            return true;
+        }
+
+        // 레온하르트 사자왕의 석대검 (Docs/Design/Lion_King_Colossal_Sword_64.png 그대로). 원본이 오른쪽을 향한다.
+        const string LionSword = "leon_sword";
+        const float LionSwordGripY = 32f;
+
+        static bool IsLeon(FieldEffect e) => e.Source != null && e.Source.Def != null && e.Source.Def.Id == "c38";
+
+        /// <summary>스킬의 대검 도트 배율: 원하는 길이에 가장 가까운 정수배.</summary>
+        static float SkillSwordPixel(float unit, float length)
+        {
+            float pixel = FieldPixelSize(unit);
+            return Mathf.Max(1, Mathf.RoundToInt(length / (SwordReach * pixel))) * pixel;
+        }
+
         /// <summary>손 위치 hand 에서 angleDeg 방향으로 무기 도트를 그린다. size = 도트 한 칸의 UI 크기.</summary>
         static void DrawSwordSprite(Texture2D texture, Vector2 hand, float angleDeg, float size, float alpha, float gripY = SwordGripY)
         {
@@ -81,19 +127,19 @@ namespace TextSlayers
         }
 
         /// <summary>
-        /// 스킬의 대검: 스티움은 도트(길이에 가장 가까운 정수배), 다른 캐릭터는 기존 도형 날.
+        /// 스킬의 대검: 스티움 · 레온하르트는 도트(길이에 가장 가까운 정수배), 다른 캐릭터는 기존 도형 날.
         /// </summary>
         static void DrawSkillBlade(FieldEffect e, float unit, Vector2 pivot, float angleDeg, float length, float width, Color main, float alpha)
         {
-            var texture = e.Source != null && e.Source.Def != null && e.Source.Def.Id == "stium" ? SwordTexture() : null;
+            bool leon = IsLeon(e);
+            var texture = leon ? WeaponTexture(LionSword)
+                        : e.Source != null && e.Source.Def != null && e.Source.Def.Id == "stium" ? SwordTexture() : null;
             if (texture == null)
             {
                 DrawBlade(pivot, angleDeg, length, width, main, alpha);
                 return;
             }
-            float pixel = FieldPixelSize(unit);
-            int zoom = Mathf.Max(1, Mathf.RoundToInt(length / (SwordReach * pixel)));
-            DrawSwordSprite(texture, pivot, angleDeg, zoom * pixel, alpha);
+            DrawSwordSprite(texture, pivot, angleDeg, SkillSwordPixel(unit, length), alpha, leon ? LionSwordGripY : SwordGripY);
         }
     }
 }

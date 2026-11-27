@@ -83,6 +83,8 @@ namespace TextSlayers
         public float Angle = 120f;          // 부채꼴 각도
         public float Knock;                 // + 밀쳐내기 / - 끌어당기기 (유닛)
         public bool PullToSelf;             // 시전자 앞까지 끌어온다
+        public float ReelTime;              // PullToSelf 와 함께: 이 시간(초) 동안 시전자 둘레를 한 바퀴 돌리며 감아 정면에 놓는다
+        public int ReelKnockLevel;          // 감는 동안 사슬에 닿은 다른 적의 넉백 단계 (0 = 없음)
         public float Stun;                  // 기절 (초)
         public bool Roll;                   // "A ~ B" (멜): 기절 · 대상 수 · 범위를 매번 무작위
         public float Root;                  // 시전자 이동 불가 (초)

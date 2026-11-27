@@ -20,6 +20,8 @@ namespace TextSlayers
         const float MissileRiseHeight = 3f;   // 다연장 탄두 수직 상승 높이 (칸) [임시]
         const float SkyCutTime = 0.14f;      // 하늘가르기: 내려베는 시간
 
+        const float SkySwordLength = 2.7f;   // 하늘가르기 대검의 손 → 칼끝 (U 단위, 정수배로 맞춘다) [임시]
+
         /// <summary>대검과 궤적이 같이 쓰는 각도: 머리 위(뒤로 살짝 젖힘) → 바라보는 방향 아래.</summary>
         static float SkyCutAngle(Vector2 dir, float age)
         {
@@ -96,23 +98,6 @@ namespace TextSlayers
 
         static Vector2 Arc(Vector2 a, Vector2 ctrl, Vector2 b, float t)
             => Vector2.Lerp(Vector2.Lerp(a, ctrl, t), Vector2.Lerp(ctrl, b, t), t);
-
-        /// <summary>일반 대검: 자루 · 코등이 · 강철 날 · 칼끝. pivot 은 손 위치.</summary>
-        static void DrawGreatSword(Vector2 hand, float angleDeg, float U, float alpha)
-        {
-            Vector2 dir = Polar(angleDeg);
-            Vector2 perp = new Vector2(-dir.y, dir.x);
-            float length = U * 2.2f, width = U * 0.36f;
-            DrawFxRect(Texture2D.whiteTexture, hand + dir * (U * 0.1f), U * 0.55f, U * 0.13f, WoodShaft, alpha, angleDeg);                          // 자루
-            DrawFxRect(fxDisc, hand - dir * (U * 0.17f), U * 0.24f, U * 0.24f, new Color(0.75f, 0.62f, 0.3f), alpha);                                // 폼멜
-            DrawFxRect(Texture2D.whiteTexture, hand + dir * (U * 0.4f), U * 0.14f, width * 2.4f, new Color(0.75f, 0.62f, 0.3f), alpha, angleDeg);   // 코등이
-            Vector2 start = hand + dir * (U * 0.46f);
-            Vector2 mid = start + dir * (length * 0.42f);
-            DrawFxRect(Texture2D.whiteTexture, mid, length * 0.84f, width, SteelBlade, alpha, angleDeg);
-            DrawFxRect(Texture2D.whiteTexture, mid, length * 0.8f, width * 0.2f, new Color(0.55f, 0.57f, 0.68f), alpha, angleDeg);
-            DrawFxRect(Texture2D.whiteTexture, mid + perp * (width * 0.4f), length * 0.84f, width * 0.12f, Color.white, alpha, angleDeg);
-            DrawFxRect(Diamond, start + dir * (length * 0.84f), length * 0.3f, width, SteelBlade, alpha, angleDeg);
-        }
 
         // ───────── 바닥 잔흔 (유닛보다 아래) ─────────
 
@@ -728,14 +713,15 @@ namespace TextSlayers
                     float ang = -90f - side * Mathf.Lerp(-100f, 14f, up);
                     float shake = t > 0.5f ? Mathf.Sin(age * 55f) * 1.2f : 0f;
                     Vector2 hand = follow + new Vector2(shake, -U * Mathf.Lerp(0f, 0.55f, up));
-                    DrawGreatSword(hand, ang, U, 1f);
-                    if (t > 0.6f) DrawFx(fxDisc, hand + Polar(ang) * (U * 2.7f), U * (0.5f + 0.5f * Mathf.Sin(age * 20f)), Color.white, 0.9f);   // 칼끝 빛
+                    DrawSkillBlade(e, unit, hand, ang, U * SkySwordLength, U * 0.36f, SteelBlade, 1f);
+                    float tip = SwordReach * SkillSwordPixel(unit, U * SkySwordLength);
+                    if (t > 0.6f) DrawFx(fxDisc, hand + Polar(ang) * tip, U * (0.5f + 0.5f * Mathf.Sin(age * 20f)), Color.white, 0.9f);   // 칼끝 빛
                     break;
                 }
                 case FieldEffectKind.SwordCut:    // 들어 올린 대검을 앞으로 내려벤다
                 {
                     float a = t < 0.7f ? 1f : (1f - t) / 0.3f;
-                    DrawGreatSword(follow, SkyCutAngle(e.Dir, age), U, a);
+                    DrawSkillBlade(e, unit, follow, SkyCutAngle(e.Dir, age), U * SkySwordLength, U * 0.36f, SteelBlade, a);
                     break;
                 }
                 case FieldEffectKind.WhiteSlash:  // 바닥 잔흔: 유닛 아래에 그린다 (DrawGroundEffects)

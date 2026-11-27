@@ -184,6 +184,14 @@ namespace TextSlayers
         public float SlamTimer;                         // 지금 구간의 남은 시간
         public bool Slamming;                           // 포물선 이동 중 (false = 제압 중)
         public Vector2 SlamFrom, SlamTo;
+        // 감아오기 (족쇄의 사슬): 잡은 대상을 둘레로 한 바퀴 돌리며 끌어온다
+        public FieldUnit Reeled;                        // 내가 감고 있는 대상
+        public float ReelDuration, ReelElapsed;
+        public float ReelStartAngle, ReelSweep;         // 라디안 (화면 좌표: + 가 시계 방향)
+        public float ReelStartRadius;
+        public Vector2 ReelFront;                       // 끝났을 때 대상이 놓이는 정면 (좌우)
+        public int ReelKnockLevel;                      // 사슬에 닿은 다른 적의 넉백 단계
+        public readonly HashSet<FieldUnit> ReelSwept = new HashSet<FieldUnit>();   // 이번 감기에서 이미 밀어낸 적
         public FieldSkillDef Barrage;
         public int BarrageLeft;
         public float BarrageInterval, BarrageNext;
@@ -490,7 +498,7 @@ namespace TextSlayers
             Phase = FieldPhase.Running;
             Altar = 0f;
             EyeOpen = false;
-            foreach (var u in Players) { if (u.MoonShadow) EndMoonShadow(u); u.Marked = false; u.FollowUps.Clear(); u.ChannelTimer = 0f; CancelCast(u); u.SpecialAmmo = 0; u.ArrivalHit = null; u.Dashing = false; u.OffMapTimer = 0f; u.HeldTimer = 0f; u.Grabbed = null; u.GrabSkill = null; u.Barrage = null; u.AirTimer = 0f; }
+            foreach (var u in Players) { if (u.MoonShadow) EndMoonShadow(u); u.Marked = false; u.FollowUps.Clear(); u.ChannelTimer = 0f; CancelCast(u); u.SpecialAmmo = 0; u.ArrivalHit = null; u.Dashing = false; u.OffMapTimer = 0f; u.HeldTimer = 0f; u.Grabbed = null; u.GrabSkill = null; u.Reeled = null; u.Barrage = null; u.AirTimer = 0f; }
             Emit(FieldEventKind.Wave, null, null, index + 1, false, $"[{index + 1}/{WaveCount}] 적이 나타났다!");
         }
 
@@ -673,6 +681,7 @@ namespace TextSlayers
             }
             if (u.Barrage != null) BarrageStep(u, dt);
             if (u.Grabbed != null) GrabStep(u, dt);
+            if (u.Reeled != null) ReelStep(u, dt);
 
             // 화염의 팔 자해: 매초 최대 체력 5%, 체력 1 까지만 (확정 수치라 '수치 미정 피해 0' 과 무관하게 적용)
             if (u.FireArm)
@@ -1484,6 +1493,85 @@ namespace TextSlayers
         }
 
         /// <summary>나눠 때리는 연타 (염호멸연격 · 심연난무).</summary>
+        /// <summary>
+        /// 감아오기 시작 (사용자 2026-11-27: 잡으면 원형으로 한 바퀴 돌며 끌고 와 정면에 놓는다).
+        /// 슈퍼아머 대상은 끌려오지 않는다 (끌어당김과 같은 규칙). 강인함은 적용하지 않는다 [해석].
+        /// </summary>
+        void StartReel(FieldUnit src, FieldUnit f, float duration, int knockLevel)
+        {
+            if (!src.Alive || !f.Alive || f.SuperArmor || f.HeldTimer > 0f || src.Reeled != null) return;
+            Vector2 to = f.Pos - src.Pos;
+            float side = to.x >= 0f ? 1f : -1f;                       // 정면: 던진 쪽 (좌우). 왼쪽이면 도는 방향도 반대로
+            float start = Mathf.Atan2(to.y, to.x);
+            float front = side > 0f ? 0f : Mathf.PI;
+            float rest = Mathf.DeltaAngle(start * Mathf.Rad2Deg, front * Mathf.Rad2Deg) * Mathf.Deg2Rad;
+
+            src.Reeled = f;
+            src.ReelDuration = duration;
+            src.ReelElapsed = 0f;
+            src.ReelStartAngle = start;
+            src.ReelSweep = side * Mathf.PI * 2f + rest;              // 한 바퀴 + 정면까지 남은 각도 (270 ~ 450도)
+            src.ReelStartRadius = to.magnitude;
+            src.ReelFront = new Vector2(side, 0f);
+            src.ReelKnockLevel = knockLevel;
+            src.ReelSwept.Clear();
+
+            // 감는 동안: 펜리르는 그 자리에서 사슬만 다루고(밀리지 않음 [해석]), 대상은 행동 불가
+            CancelCast(src);
+            src.Dashing = false; src.HasReturn = false; src.ArrivalHit = null; src.PushTimer = 0f;
+            src.ChannelTimer = duration + FieldConst.Dt;
+            src.ArmorTimer = Mathf.Max(src.ArmorTimer, duration);
+            CancelCast(f);
+            f.Dashing = false; f.HasReturn = false; f.ArrivalHit = null; f.PushTimer = 0f; f.AirTimer = 0f;
+            f.HeldTimer = duration + FieldConst.Dt;
+        }
+
+        /// <summary>반지름은 점점 줄이고 각도는 천천히 시작해 빠르게 돌았다가 정면에서 멈춘다. 필드 밖으로 나가면 벽을 따라 돈다.</summary>
+        void ReelStep(FieldUnit u, float dt)
+        {
+            var held = u.Reeled;
+            if (!held.Alive || u.StunTimer > 0f)                      // 기절하면 놓친다
+            {
+                held.HeldTimer = 0f;
+                u.Reeled = null; u.ChannelTimer = 0f;
+                return;
+            }
+            u.ReelElapsed += dt;
+            float k = Mathf.Clamp01(u.ReelElapsed / Mathf.Max(dt, u.ReelDuration));
+            bool done = k >= 1f - 0.0001f;
+            float end = FieldConst.DashStopDist * 1.2f;
+            float radius = Mathf.Lerp(u.ReelStartRadius, Mathf.Min(end, u.ReelStartRadius), 1f - (1f - k) * (1f - k));
+            float angle = u.ReelStartAngle + u.ReelSweep * (k * k * (3f - 2f * k));
+            Vector2 dir = done ? u.ReelFront : new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+
+            held.Pos = u.Pos + dir * radius;
+            ClampToField(held);
+            held.PushTimer = 0f;
+            u.Facing = dir;
+            SweepChain(u, held, dir);
+            if (done)
+            {
+                held.HeldTimer = 0f;
+                u.Reeled = null; u.ChannelTimer = 0f;
+            }
+            else held.HeldTimer = Mathf.Max(held.HeldTimer, u.ReelDuration - u.ReelElapsed + dt);
+        }
+
+        /// <summary>
+        /// 감는 동안 사슬(펜리르 → 잡힌 대상)에 닿은 다른 적은 사슬이 도는 방향으로 밀려난다 (사용자 2026-11-27).
+        /// 한 번의 감기에서 적마다 한 번만, 피해 없이 [해석]. 슈퍼아머 · 강인함은 일반 넉백과 같다.
+        /// </summary>
+        void SweepChain(FieldUnit u, FieldUnit held, Vector2 chainDir)
+        {
+            if (u.ReelKnockLevel <= 0) return;
+            // 화면 좌표에서 각도가 커지는 방향의 접선
+            Vector2 push = new Vector2(-chainDir.y, chainDir.x) * Mathf.Sign(u.ReelSweep);
+            foreach (var f in FoesOnSegment(u, u.Pos, held.Pos, ChainHalfWidth))
+                if (f != held && f.HeldTimer <= 0f && u.ReelSwept.Add(f)) Knockback(f, push, u.ReelKnockLevel);
+        }
+
+        const float ChainHalfWidth = 0.15f;   // 사슬 판정의 반폭 (유닛) [임시]
+
         void BarrageStep(FieldUnit u, float dt)
         {
             var s = u.Barrage;
@@ -2191,9 +2279,13 @@ namespace TextSlayers
 
             if (s.PullToSelf)
             {
-                Vector2 to = src.Pos - f.Pos;
-                float dist = Mathf.Max(0f, to.magnitude - FieldConst.DashStopDist * 1.2f);
-                if (dist > 0.01f) Push(f, to.normalized * dist);
+                if (s.ReelTime > 0f && !src.Hidden) StartReel(src, f, s.ReelTime, s.ReelKnockLevel);
+                else
+                {
+                    Vector2 to = src.Pos - f.Pos;
+                    float dist = Mathf.Max(0f, to.magnitude - FieldConst.DashStopDist * 1.2f);
+                    if (dist > 0.01f) Push(f, to.normalized * dist);
+                }
             }
             else if (s.Knock != 0f)
             {

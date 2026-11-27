@@ -54,6 +54,7 @@ const SPECS = [
   { key: "cleaveMail", fx: "melee/cleave-mail", to: 1.0, fps: 30 },
   { key: "cleaveYowol", fx: "melee/cleave-yowol", to: 0.65, fps: 30 },
   { key: "cleaveLavada", fx: "melee/cleave-lavada", to: 1.0, fps: 30 },
+  { key: "cleaveLeon", fx: "melee/cleave-leon", to: 1.0, fps: 30 },
   { key: "fireSlash", make: fireSlash, to: 1.05, fps: 24 },
   { key: "fireWide", make: () => fireSlash(-30, 168, 52, "fireWide"), to: 0.95, fps: 24 },
   { key: "ernBuster", make: ernBuster, to: 1.2, fps: 20 },

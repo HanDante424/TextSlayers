@@ -215,7 +215,7 @@ new FieldSkillDef { Id = "agni_okyeom", Name = "옥염의 멸화 - 권", Shape =
                 Fx = FieldEffectKind.Leap, Fx2 = FieldEffectKind.Burst, FxColor = SkillColor.Frost },
             new FieldSkillDef { Id = "fr_ambush", KnockLevel = 1, Name = "급습", Shape = SkillShape.Dash, Pick = TargetPick.Marked, Range = 14f, Radius = 0.9f,
                 Fx = FieldEffectKind.Trail, Fx2 = FieldEffectKind.Bite, FxColor = SkillColor.Frost },
-            new FieldSkillDef { Id = "fr_chain", Name = "족쇄의 사슬", Shape = SkillShape.Projectile, Pick = TargetPick.Farthest, Range = 16f, Shot = ShotStyle.Orb, Marks = true, PullToSelf = true,
+            new FieldSkillDef { Id = "fr_chain", Name = "족쇄의 사슬", Shape = SkillShape.Projectile, Pick = TargetPick.Farthest, Range = 16f, Shot = ShotStyle.Orb, Marks = true, PullToSelf = true, ReelTime = 0.9f, ReelKnockLevel = 2,   // 한 바퀴 감아오기 · 사슬에 닿은 적 밀치기 [임시]
                 Fx2 = FieldEffectKind.Burst, Radius = 0.6f, FxColor = SkillColor.Steel },
             new FieldSkillDef { Id = "fr_eclipse_jaws", KnockLevel = 1, Name = "일식의 아가리", Shape = SkillShape.Target, Range = 1.8f,
                 Fx = FieldEffectKind.Maw, Radius = 1f, FxColor = SkillColor.Frost },
