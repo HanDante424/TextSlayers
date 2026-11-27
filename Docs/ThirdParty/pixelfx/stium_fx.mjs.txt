@@ -1,0 +1,137 @@
+// 스티움 전용 이펙트 (pixelfx 의 swing · smear 를 써서 만든 것). 좌표는 발 위치 기준 도트 단위, 오른쪽 방향.
+import { Particles, P, Rng, fit, sparkle, rand, clamp, ease, WHITE } from "./pixelfx/src/core/index.js";
+import { swing, onSwing, travel, smear, glowAlong } from "./pixelfx/src/fx/melee/_lib.js";
+
+const VOID = ["#07040c", "#140a22", "#24113a", "#3b1d58", "#5f2c9c", "#a25ce8", "#e4c4ff", "#ffffff"];
+const make = (id, meta, create) => {
+  const m = { name: id, loop: false, options: {}, ...meta };
+  return { id: "custom/" + id, meta: m, mod: { meta: m, create } };
+};
+
+// 초승달 베기: 휘두름(sweep) → 머묾(hang) → 꼬리부터 찢어지며 입자(tear)
+function reap(id, { cx, cy, R, a0, span, W, wind, sweep, hang, tear, linear = false }) {
+  const pad = 22, reach = R + pad;
+  const size = [Math.ceil(reach * 2), Math.ceil(reach * 2)];
+  const origin = [Math.ceil(reach - cx), Math.ceil(reach - cy)];
+  const T0 = wind, T1 = wind + sweep, T2 = T1 + hang, T3 = T2 + tear;
+  return make(id, { size, origin, duration: T3 + 0.2, fps: 30 }, () => {
+    const C = fit(VOID, 8), Rg = new Rng(13), ps = new Particles({ rng: Rg, ground: () => 1000, haze: C[5] });
+    const A = swing({ cx, cy, R, sy: 1, rot: 0, a0, dir: 1, span });
+    const head = (t) => (linear ? clamp((t - T0) / sweep) : ease.inQuad(clamp((t - T0) / sweep)));
+    const gone = (t) => clamp((t - T2) / tear);
+    let t = 0, torn = 0;
+    return {
+      update(dt) {
+        t += dt;
+        const k = gone(t);
+        for (let u = torn; u < Math.min(1, k * 1.15); u += 2.2 / (R * span)) {
+          const tr = travel({ ...A, R: R - Rg.range(0, W * 0.4) }, u * span);
+          ps.spawn(P.STAR, tr.x + Rg.range(-3, 3), tr.y + Rg.range(-3, 3), Rg.range(-10, 10), -Rg.range(4, 22), Rg.range(0.18, 0.4), Rg.chance(0.4) ? C[6] : C[5], Rg.range(0.6, 1.5));
+          if (Rg.chance(0.35)) ps.spawn(P.VAPOUR, tr.x, tr.y, Rg.range(-10, 10), -Rg.range(6, 18), Rg.range(0.2, 0.4), Rg.chance(0.5) ? C[4] : C[3], Rg.range(2.5, 5));
+        }
+        torn = Math.max(torn, Math.min(1, k * 1.15));
+        ps.update(dt);
+      },
+      draw(p) {
+        const U = span * head(t), k = gone(t);
+        if (U > 0.02 && k < 1) {
+          smear(p, A, Math.max(0, U - Math.PI * 2 + 0.01), U, W, (u, r, out) => {
+            const v = u / U, w = W * Math.pow(Math.sin(Math.PI * Math.pow(clamp(v), 1.7)), 0.55);
+            if (w < 0.5) return;
+            const q = (R - r) / w;
+            if (q < 0 || q > 1) return;
+            const n = rand(Math.floor(u * 40), Math.floor(r), 7);
+            if (k > 0 && u / span < k * 1.2 - n * 0.2) return;
+            out.c = C[q < 0.08 ? 7 : q < 0.16 ? 6 : q < 0.25 ? 5 : q < 0.4 ? 4 : q < 0.62 ? 3 : 2];
+            out.a = Math.min(1, v / 0.25);
+          });
+          glowAlong(p, A, R - 2, Math.max(0, k * 1.2 * span - 0.3), U, 12, C[5], (u) => 0.3 * (u / U));
+          if (t < T1 + 0.08) {
+            const [x, y] = onSwing(A, R - 3, U);
+            sparkle(p, x, y, 7, C[6], C[5], 0.5);
+          }
+        }
+        ps.draw(p);
+      },
+    };
+  });
+}
+
+// 날아가는 검기 (반복): 오른쪽으로 볼록한 초승달이 일렁이고 뒤로 알갱이가 흐른다
+export function wave() {
+  const D = 0.3;
+  return make("darkWave", { size: [112, 120], origin: [72, 60], duration: D, fps: 20, loop: true }, () => {
+    const C = fit(VOID, 8), A = swing({ cx: -30, cy: 0, R: 44, sy: 1, rot: 0, a0: -1.15, dir: 1, span: 2.3 }), W = 20;
+    let t = 0;
+    return {
+      update(dt) { t += dt; },
+      draw(p) {
+        const ph = (t % D) / D;
+        smear(p, A, 0, A.span, W + 2, (u, r, out) => {
+          const v = u / A.span, wobble = 1 + 0.12 * Math.sin(v * 14 + ph * Math.PI * 2);
+          const w = W * Math.pow(Math.sin(Math.PI * clamp(v)), 0.8) * wobble;
+          if (w < 0.5) return;
+          const q = (A.R - r) / w;
+          if (q < 0 || q > 1) return;
+          out.c = C[q < 0.1 ? 7 : q < 0.2 ? 6 : q < 0.34 ? 5 : q < 0.55 ? 4 : q < 0.78 ? 3 : 2];
+          out.a = q > 0.8 ? 0.7 : 1;
+        });
+        glowAlong(p, A, A.R - 3, 0, A.span, 14, C[5], (u) => 0.34 * Math.sin(Math.PI * clamp(u / A.span)));
+        // 뒤로 흐르는 알갱이 (주기 D 로 반복)
+        for (let i = 0; i < 16; i++) {
+          const f = (ph + rand(i, 3, 1)) % 1, [x, y] = onSwing(A, A.R - 8 - rand(i, 5, 2) * 10, A.span * (0.08 + 0.84 * rand(i, 9, 4)));
+          p.dot(x - f * 34, y, f < 0.4 ? C[6] : f < 0.7 ? C[5] : C[3], 1 - f);
+          if (i % 3 === 0) p.line(x - f * 34 - 6, y, x - f * 34, y, C[4], 0.6 * (1 - f));
+        }
+      },
+    };
+  });
+}
+
+// 검기가 지나간 자리에 남는 입자
+export function waveDust() {
+  return make("waveDust", { size: [72, 72], origin: [36, 36], duration: 0.6, fps: 18 }, () => {
+    const C = fit(VOID, 8), R = new Rng(5), ps = new Particles({ rng: R, ground: () => 1000 });
+    for (let i = 0; i < 9; i++) ps.spawn(P.VAPOUR, R.range(-7, 7), R.range(-14, 14), R.range(-14, 6), R.range(-12, 4), R.range(0.35, 0.55), R.chance(0.5) ? C[4] : C[3], R.range(3, 6));
+    for (let i = 0; i < 18; i++) ps.spawn(P.STAR, R.range(-9, 9), R.range(-18, 18), R.range(-18, 8), R.range(-18, 6), R.range(0.25, 0.55), R.chance(0.4) ? C[6] : C[5], R.range(0.6, 1.5));
+    return { update: (dt) => ps.update(dt), draw: (p) => ps.draw(p) };
+  });
+}
+
+// 폭발 중앙의 작은 어둠 기둥: 솟구쳤다가 가늘어지며 사라진다
+export function darkPillar() {
+  const D = 0.85, H = 96;
+  return make("darkPillar", { size: [64, 128], origin: [32, 112], duration: D, fps: 24 }, () => {
+    const C = fit(VOID, 8), R = new Rng(7), ps = new Particles({ rng: R, ground: () => 1000 });
+    let t = 0;
+    return {
+      update(dt) {
+        t += dt;
+        if (t < 0.5 && R.chance(0.7)) ps.spawn(P.STAR, R.range(-12, 12), -R.range(0, H), R.range(-6, 6), -R.range(20, 60), R.range(0.2, 0.45), R.chance(0.5) ? C[6] : C[5], R.range(0.6, 1.5));
+        ps.update(dt);
+      },
+      draw(p) {
+        const rise = ease.outCubic(clamp(t / 0.1)), thin = 1 - clamp((t - 0.35) / (D - 0.35));
+        const h = H * rise, half = 9 * thin;
+        if (half > 0.5) {
+          for (let y = 0; y <= h; y++) {
+            const w = half * (1 + 0.18 * Math.sin(y * 0.35 - t * 40)) * (y > h - 14 ? Math.max(0.2, (h - y) / 14) : 1);
+            for (let x = Math.floor(-w); x <= Math.ceil(w); x++) {
+              const q = Math.abs(x) / (w + 0.01);
+              if (q > 1) continue;
+              p.dot(x, -y, q < 0.3 ? C[0] : q < 0.55 ? C[2] : q < 0.78 ? C[4] : q < 0.92 ? C[5] : C[6], 0.95);
+            }
+            if (y % 8 === 0) p.glow(0, -y, 18, C[5], 0.22 * thin);
+          }
+          p.glow(0, -2, 30, C[5], 0.5 * thin);
+        }
+        ps.draw(p);
+      },
+    };
+  });
+}
+
+// 회전베기: 몸을 중심으로 한 바퀴 (판정 반지름 2칸 ≈ 108 도트)
+export const spin = () => reap("stiumSpin", { cx: 0, cy: -28, R: 108, a0: -1.5708, span: Math.PI * 2, W: 36, wind: 0.02, sweep: 0.28, hang: 0.08, tear: 0.34, linear: true });
+// 강격검: 위(-100°)에서 앞(+25°)으로 빠르게 내려찍기
+export const smashArc = () => reap("stiumSmash", { cx: 0, cy: -28, R: 112, a0: -1.745, span: 2.182, W: 42, wind: 0, sweep: 0.09, hang: 0.18, tear: 0.38 });
