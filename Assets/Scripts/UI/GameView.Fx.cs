@@ -769,8 +769,6 @@ namespace TextSlayers
             {
                 case Weapon.GreatSword: return 0.51f;
                 case Weapon.Halberd: return 0.42f;
-                case Weapon.Katana: return 0.27f;
-                case Weapon.Cross: return 0.36f;
                 default: return 0.3f;
             }
         }
@@ -814,8 +812,6 @@ namespace TextSlayers
             Color trail = main;
             switch (w)
             {
-                case Weapon.Katana: from = -100f; to = 95f; windup = 0.14f; cut = 0.3f; reach = 2.3f; break;
-                case Weapon.Cross: from = -120f; to = 70f; reach = 2.0f; break;
                 default: from = -95f; to = 75f; windup = 0.16f; cut = 0.4f; reach = 1.8f; break;
             }
 
@@ -828,7 +824,7 @@ namespace TextSlayers
             if (swing > 0.05f)
                 for (int k = 1; k <= 4; k++)
                 {
-                    float back = k * (w == Weapon.Katana ? 30f : 24f);
+                    float back = k * 24f;
                     if (offset - from < back) break;
                     float ga = baseAng + (offset - back) * side;
                     DrawFx(fxArc, pivot, U * reach * 2f, trail, 0.65f * a * (1f - k * 0.2f), ga);
@@ -844,39 +840,6 @@ namespace TextSlayers
                 case Weapon.OneHand:
                     DrawOneHandSword(hand, ang, U, trail, a);
                     break;
-                case Weapon.Katana:
-                {
-                    float length = U * 1.9f, width = U * 0.13f;
-                    DrawFxRect(Texture2D.whiteTexture, hand + dir * (U * 0.12f), U * 0.48f, U * 0.12f, new Color(0.14f, 0.12f, 0.2f), a, ang);        // 긴 자루
-                    DrawFxRect(fxDisc, hand + dir * (U * 0.38f), U * 0.18f, U * 0.34f, new Color(0.85f, 0.7f, 0.35f), a, ang);            // 둥근 코등이
-                    // 살짝 휜 날: 세 마디를 조금씩 꺾는다
-                    Vector2 p0 = hand + dir * (U * 0.42f);
-                    float bend = -side * 7f;
-                    for (int k = 0; k < 3; k++)
-                    {
-                        float segAng = ang + bend * k;
-                        Vector2 d = Polar(segAng);
-                        Vector2 mid = p0 + d * (length / 6f);
-                        DrawFxRect(fxLine, mid, length / 2.4f, width * 3.6f, trail, 0.55f * a, segAng);
-                        DrawFxRect(Texture2D.whiteTexture, mid, length / 3f * 1.08f, width, SteelBlade, a, segAng);
-                        DrawFxRect(Texture2D.whiteTexture, mid, length / 3f * 1.08f, width * 0.35f, Color.white, a, segAng);
-                        p0 += d * (length / 3f);
-                    }
-                    if (swing > 0.4f && swing < 0.95f) DrawFx(fxDisc, p0, U * 0.7f, Color.white, 0.9f * a);                               // 칼끝 반짝임
-                    break;
-                }
-                case Weapon.Cross:
-                {
-                    // 십자가의 긴 쪽을 쥐고 휘두른다: 가로대는 끝 가까이
-                    float length = U * 1.9f, width = U * 0.26f;
-                    Vector2 mid = hand + dir * (length * 0.45f);
-                    DrawFxRect(fxLine, mid, length * 1.2f, width * 3f, trail, 0.65f * a, ang);
-                    DrawFxRect(Texture2D.whiteTexture, mid, length, width, light, a, ang);
-                    DrawFxRect(Texture2D.whiteTexture, hand + dir * (length * 0.68f), width, U * 1.05f, light, a, ang);
-                    DrawFxRect(Texture2D.whiteTexture, mid, length * 0.92f, width * 0.28f, Color.white, a, ang);
-                    DrawFx(fxDisc, hand + dir * (length * 0.68f), U * 0.8f, main, 0.55f * a);
-                    break;
-                }
             }
 
             // 베는 순간의 충격
@@ -884,7 +847,7 @@ namespace TextSlayers
             {
                 float k = Mathf.Clamp01((t - windup - cut * 0.7f) / (1f - windup - cut * 0.7f));
                 Vector2 hit = c + e.Dir * (U * 0.9f);
-                DrawFx(fxRing, hit, U * Mathf.Lerp(0.6f, w == Weapon.OneHand || w == Weapon.Katana ? 1.7f : 2.2f, Ease(k)), light, 1f - k);
+                DrawFx(fxRing, hit, U * Mathf.Lerp(0.6f, w == Weapon.OneHand ? 1.7f : 2.2f, Ease(k)), light, 1f - k);
                 DrawFx(fxDisc, hit, U * 1.1f, trail, 0.6f * (1f - k));
             }
         }

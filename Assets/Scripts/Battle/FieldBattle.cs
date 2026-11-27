@@ -369,7 +369,7 @@ namespace TextSlayers
                 foreach (var sk in u.Skills) if (sk.Erosion) u.AppliesErosion = true;
                 if (slot.Def.Eclipse) EclipseCount++;
                 float yFrac = (i + 1f) / (party.Length + 1f);
-                u.Pos = new Vector2(FieldConst.PlayerStartX + (i % 2) * 1f, FieldConst.Height * yFrac);
+                u.Pos = new Vector2(FieldConst.PlayerStartX + (i % 2) * FieldConst.PlayerStartStagger, FieldConst.Height * yFrac);
                 u.FlankEdgeY = 0f;   // 후방 침입 가장자리는 첫 이동 때 적 배치를 보고 정한다
                 u.ActionTimer = Interval(u) * (float)rng.NextDouble() * 0.5f;
                 Players.Add(u);
@@ -493,6 +493,9 @@ namespace TextSlayers
             foreach (var u in Players) { if (u.MoonShadow) EndMoonShadow(u); u.Marked = false; u.FollowUps.Clear(); u.ChannelTimer = 0f; CancelCast(u); u.SpecialAmmo = 0; u.ArrivalHit = null; u.Dashing = false; u.OffMapTimer = 0f; u.HeldTimer = 0f; u.Grabbed = null; u.GrabSkill = null; u.Barrage = null; u.AirTimer = 0f; }
             Emit(FieldEventKind.Wave, null, null, index + 1, false, $"[{index + 1}/{WaveCount}] 적이 나타났다!");
         }
+
+        /// <summary>아군 시작 지점의 한가운데 (월영이 옮겨 가는 곳).</summary>
+        static Vector2 PlayerSpawnCenter => new Vector2(FieldConst.PlayerStartX + FieldConst.PlayerStartStagger * 0.5f, FieldConst.Height * 0.5f);
 
         /// <summary>적 시작 위치: 오른쪽에 세로로 고르게, 많으면 여러 줄.</summary>
         static Vector2 StartPos(int i, int count)
@@ -786,7 +789,26 @@ namespace TextSlayers
             for (int i = 0; i < u.Cooldowns.Length; i++) u.Cooldowns[i] = 0f;
             u.MoonShadow = true;
             u.ShadowTrace = 0;
+            MoveToSpawnCenter(u);
             Emit(FieldEventKind.Info, u, null, 0, false, $"{u.Name} — 월영");
+        }
+
+        /// <summary>
+        /// 월영은 아군 시작 지점 중앙으로 옮겨 가서 선다 (사용자 2026-11-27). 즉시 이동 [해석].
+        /// 하던 시전 · 후속타 · 돌진 · 도약 · 밀림은 끊는다: 남아 있으면 다시 자리를 벗어난다.
+        /// </summary>
+        void MoveToSpawnCenter(FieldUnit u)
+        {
+            CancelCast(u);
+            u.FollowUps.Clear();
+            u.ChannelTimer = 0f;
+            u.Dashing = false;
+            u.HasReturn = false;
+            u.ArrivalHit = null;
+            u.OffMapTimer = 0f;
+            u.AirTimer = 0f;
+            u.PushTimer = 0f;
+            u.Pos = PlayerSpawnCenter;
         }
 
         void EndMoonShadow(FieldUnit u)
@@ -1087,8 +1109,10 @@ namespace TextSlayers
                     if (dist >= minDist) continue;
                     Vector2 dir = dist < 0.0001f ? new Vector2(0f, 1f) : d / dist;
                     float push = (minDist - dist) * 0.5f;
-                    all[i].Pos -= dir * push;
-                    all[j].Pos += dir * push;
+                    // 월영은 제자리를 지킨다: 겹치면 상대만 비켜난다
+                    float shareI = all[i].MoonShadow ? 0f : all[j].MoonShadow ? 2f : 1f;
+                    all[i].Pos -= dir * (push * shareI);
+                    all[j].Pos += dir * (push * (2f - shareI));
                     ClampToField(all[i]);
                     ClampToField(all[j]);
                 }

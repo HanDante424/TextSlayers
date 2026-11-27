@@ -647,7 +647,7 @@ namespace TextSlayers
                 cy -= u.AirHeight * unit * k;
             }
             var body = new Rect(cx - d / 2, cy - d / 2, d, d);
-            var sprite = GetFieldSprite(u.Def?.Id);
+            var sprite = UnitFieldSprite(u);
             var spriteRect = FieldSpriteRect(body);
             bool faceLeft = u.Facing.x < 0f;
             if (sprite == null)
@@ -699,7 +699,8 @@ namespace TextSlayers
             }
             if (u.Immortal)   // 테스트 더미: 전술 한 글자 (돌 · 침 · 견 · 후)
                 GUI.Label(new Rect(cx - 20, body.y - 15, 40, 14), $"<size=11><color=#ffd76a>{StrategyMark(u.Strategy)}</color></size>", small);
-            if (u.MoonShadow) DrawEvilEye(new Vector2(cx, cy), d * 0.45f, now, 0.9f);   // 캐릭터를 덮는 눈
+            if (u.MoonShadow && (sprite == null || !sprite.FormArt))                     // 캐릭터를 덮는 눈 (월영 도트에는 눈이 있다)
+                DrawEvilEye(new Vector2(cx, cy), d * 0.45f, now, 0.9f);
 
             // 상태 표시: 기절(노란 고리) · 표식(빨간 마름모)
             if (u.StunTimer > 0f || u.Marked) EnsureFx();
