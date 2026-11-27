@@ -561,6 +561,7 @@ namespace TextSlayers
             for (int i = 1; i < (int)FieldConst.Height; i++)
                 Fill(new Rect(r.x, r.y + i * unit, r.width, 1), FieldLine);
 
+            DrawGroundEffects(r, unit, b);          // 바닥 잔흔은 유닛 아래
             foreach (var u in b.Enemies) DrawUnit(r, unit, u, b.Time);
             foreach (var u in b.Players) DrawUnit(r, unit, u, b.Time);
             DrawEffects(r, unit, b);
@@ -646,8 +647,11 @@ namespace TextSlayers
             if (u.Def != null && u.Def.ShowWeapons)
             {
                 float side = u.Facing.x >= 0f ? 1f : -1f;
-                Fill(new Rect(cx - side * d * 0.55f - d * 0.22f, cy - d * 0.45f, d * 0.44f, d * 0.8f), new Color(0.35f, 0.33f, 0.3f));   // 케이스
-                Fill(new Rect(cx - side * d * 0.55f - d * 0.18f, cy - d * 0.4f, d * 0.36f, d * 0.08f), new Color(0.6f, 0.55f, 0.45f));
+                if (now >= u.CaseDownUntil)     // 케이스를 내려박은 동안에는 등에 없다
+                {
+                    Fill(new Rect(cx - side * d * 0.55f - d * 0.22f, cy - d * 0.45f, d * 0.44f, d * 0.8f), new Color(0.35f, 0.33f, 0.3f));   // 케이스
+                    Fill(new Rect(cx - side * d * 0.55f - d * 0.18f, cy - d * 0.4f, d * 0.36f, d * 0.08f), new Color(0.6f, 0.55f, 0.45f));
+                }
                 Fill(new Rect(cx + side * d * 0.5f - (side < 0 ? d * 0.34f : 0f), cy, d * 0.34f, d * 0.14f), new Color(0.75f, 0.75f, 0.8f)); // 권총
             }
 

@@ -130,6 +130,8 @@ namespace TextSlayers
         public bool Combo;                  // 파이어 블레이드: 큰 베기 → 대상마다 연속 베기 → 각자 폭발
         public bool NoDamage;               // 피해 없이 효과만 (심판의 일격 제압)
         public bool ImpactCone;             // 도착 지점에 부채꼴 충격파
+        public bool Teleport;               // 돌진 대신 순간이동 (일섬). 경로 피해는 그대로
+        public float DashSpeedMul;          // 0 이 아니면 돌진 속도 배율
         public float ImpactFrame;           // 적중 순간 필드 정지 + 색 반전 (초, 실제 시간)
     }
 

@@ -120,7 +120,7 @@ namespace TextSlayers
                 case FieldEffectKind.Grasp: return FxGrasp * FxTimeMul;
                 case FieldEffectKind.Harvest: return FxHarvest * FxTimeMul;
                 case FieldEffectKind.Slash: return FxSlash * FxTimeMul;
-                case FieldEffectKind.Swing: return FxSwing * FxTimeMul;
+                case FieldEffectKind.Swing: return HasWeaponSwing(e) ? WeaponSwingTime(WeaponOf(e)) : FxSwing * FxTimeMul;
                 case FieldEffectKind.Multi: return MultiStep(e) * Mathf.Max(1, e.Count) + FxMultiOne * FxTimeMul;
                 case FieldEffectKind.Trail:
                 case FieldEffectKind.Leap: return Mathf.Max(0.1f, e.Duration) + FxAfter * FxTimeMul;
@@ -539,6 +539,20 @@ namespace TextSlayers
                             DrawFxRect(Texture2D.whiteTexture, pos, body, body, main, 0.45f * (1f - s));          // 잔상
                             DrawFx(fxArc, c, U * 1.9f, light, 1f - s, ang * Mathf.Rad2Deg + 180f);                  // 참격
                             DrawLine(pos, c, U * 0.2f, light, 0.8f * (1f - s));
+
+                            // 대상을 가로지르는 큰 베기 (사용자 2026-11-27): 순식간에 그어지고 갈라진 선이 남는다
+                            float cutAng = ang + Mathf.PI + (Hash(e.Start, k + 20) - 0.5f) * 0.9f;
+                            Vector2 cut = new Vector2(Mathf.Cos(cutAng), Mathf.Sin(cutAng));
+                            float grow = Ease(Mathf.Clamp01(s / 0.25f));
+                            Vector2 head = c - cut * (U * 1.9f), tail = head + cut * (U * 3.8f * grow);
+                            float fade = 1f - s;
+                            DrawLine(head, tail, U * 0.75f * fade, main, 0.75f * fade);
+                            DrawLine(head, tail, U * 0.32f * fade, light, fade);
+                            DrawLine(head, tail, U * 0.12f, Color.white, fade);
+                            float arcAng = cutAng * Mathf.Rad2Deg - 70f + 140f * Ease(Mathf.Clamp01(s * 2f));
+                            DrawFx(fxArc, c, U * 3f, light, 0.9f * fade, arcAng);
+                            DrawFx(fxArc, c, U * 3.25f, main, 0.6f * fade, arcAng - 24f);
+                            DrawFx(fxDisc, c, U * 1.1f * (1f - s * 0.5f), Color.white, 0.55f * fade * fade);
                         }
                         break;
                     }
@@ -643,6 +657,7 @@ namespace TextSlayers
             var kind = (BasicKind)e.Count;
             float baseAng = AngleOf(e.Dir);
             float a = 1f - t;
+            if (HasWeaponSwing(e)) { DrawWeaponSwing(e, c, U, t, main, light); return; }
             switch (kind)
             {
                 case BasicKind.Fist:       // 주먹: 대상에 짧은 충격
@@ -689,6 +704,166 @@ namespace TextSlayers
                     }
                     break;
                 }
+            }
+        }
+
+        // ── 무기를 직접 휘두르는 기본 공격 (사용자 2026-11-27) ──
+        enum Weapon { None, GreatSword, OneHand, Halberd, Katana, Cross }
+
+        const float WeaponScale = 0.65f;   // 무기 크기 배율 (사용자 2026-11-27: 너무 크다 → 1.0 에서 줄임) [임시]
+        static readonly Color SteelBlade = new Color(0.82f, 0.84f, 0.92f);
+        static readonly Color WoodShaft = new Color(0.45f, 0.32f, 0.2f);
+
+        /// <summary>캐릭터별 기본 공격 무기. 없으면 기존 호 이펙트.</summary>
+        static Weapon WeaponOf(FieldEffect e)
+        {
+            if ((BasicKind)e.Count == BasicKind.Glutton || e.Source == null || e.Source.Def == null) return Weapon.None;
+            switch (e.Source.Def.Id)
+            {
+                case "stium": return Weapon.GreatSword;
+                case "ern":                 // 에른
+                case "c38":                 // 레온하르트
+                case "c41":                 // 사하라
+                case "c48": return Weapon.OneHand;   // 가니악
+                case "c06": return Weapon.Halberd;   // 메일
+                case "c19": return Weapon.Katana;    // 요월
+                case "c32": return Weapon.Cross;     // 라바다
+                default: return Weapon.None;
+            }
+        }
+
+        static bool HasWeaponSwing(FieldEffect e) => WeaponOf(e) != Weapon.None;
+
+        static float WeaponSwingTime(Weapon w)
+        {
+            switch (w)
+            {
+                case Weapon.GreatSword: return 0.38f;
+                case Weapon.Halberd: return 0.42f;
+                case Weapon.Katana: return 0.27f;
+                case Weapon.Cross: return 0.36f;
+                default: return 0.3f;
+            }
+        }
+
+        static Vector2 Polar(float deg) => new Vector2(Mathf.Cos(deg * Mathf.Deg2Rad), Mathf.Sin(deg * Mathf.Deg2Rad));
+
+        /// <summary>뒤로 젖혔다가 베고, 날이 지나간 자리에 잔상. 무기 모양은 종류별로 그린다.</summary>
+        static void DrawWeaponSwing(FieldEffect e, Vector2 c, float U, float t, Color main, Color light)
+        {
+            var w = WeaponOf(e);
+            float baseAng = AngleOf(e.Dir);
+            float side = Hash(e.Start, 3) < 0.5f ? 1f : -1f;          // 휘두르는 방향을 번갈아
+            Vector2 pivot = c - e.Dir * (U * 0.45f);                  // 몸 중심 근처
+            U *= WeaponScale;                                          // 무기 · 궤적 크기
+
+            float from = -110f, to = 80f, windup = 0.2f, cut = 0.45f, reach = 2.0f;
+            Color trail = main;
+            switch (w)
+            {
+                case Weapon.GreatSword: from = -115f; windup = 0.22f; reach = 2.3f; trail = SkillColor.Dark; break;
+                case Weapon.Halberd: from = -130f; to = 90f; windup = 0.25f; reach = 3.1f; break;
+                case Weapon.Katana: from = -100f; to = 95f; windup = 0.14f; cut = 0.3f; reach = 2.3f; break;
+                case Weapon.Cross: from = -120f; to = 70f; reach = 2.0f; break;
+                default: from = -95f; to = 75f; windup = 0.16f; cut = 0.4f; reach = 1.8f; break;
+            }
+
+            float swing = t < windup ? 0f : Ease(Mathf.Clamp01((t - windup) / cut));
+            float offset = t < windup ? Mathf.Lerp(from + 20f, from, t / windup) : Mathf.Lerp(from, to, swing);
+            float ang = baseAng + offset * side;
+            float a = t < 0.75f ? 1f : (1f - t) / 0.25f;
+
+            // 지나간 궤적
+            if (swing > 0.05f)
+                for (int k = 1; k <= 4; k++)
+                {
+                    float back = k * (w == Weapon.Katana ? 30f : 24f);
+                    if (offset - from < back) break;
+                    float ga = baseAng + (offset - back) * side;
+                    DrawFx(fxArc, pivot, U * reach * 2f, trail, 0.65f * a * (1f - k * 0.2f), ga);
+                    DrawFx(fxArc, pivot, U * reach * 1.7f, light, 0.35f * a * (1f - k * 0.22f), ga);
+                }
+
+            Vector2 dir = Polar(ang);
+            Vector2 perp = new Vector2(-dir.y, dir.x);
+            Vector2 hand = pivot + dir * (U * 0.35f);
+
+            switch (w)
+            {
+                case Weapon.GreatSword:     // 강격검과 같은 직사각형 대검 (사용자 2026-11-27)
+                    DrawBlade(hand, ang, U * 2.4f, U * 0.55f, SkillColor.Dark, a);
+                    break;
+                case Weapon.OneHand:
+                {
+                    float length = U * 1.55f, width = U * 0.22f;
+                    DrawFxRect(Texture2D.whiteTexture, hand + dir * (U * 0.08f), U * 0.34f, U * 0.11f, WoodShaft, a, ang);
+                    DrawFxRect(Texture2D.whiteTexture, hand + dir * (U * 0.27f), U * 0.1f, U * 0.52f, new Color(0.75f, 0.62f, 0.3f), a, ang);        // 코등이
+                    Vector2 start = hand + dir * (U * 0.32f);
+                    Vector2 mid = start + dir * (length * 0.42f);
+                    DrawFxRect(fxLine, mid, length * 1.2f, width * 3.2f, trail, 0.7f * a, ang);                                          // 속성 기운
+                    DrawFxRect(Texture2D.whiteTexture, mid, length * 0.84f, width, SteelBlade, a, ang);
+                    DrawFxRect(Texture2D.whiteTexture, mid, length * 0.84f, width * 0.25f, Color.white, a, ang);
+                    DrawFxRect(Diamond, start + dir * (length * 0.84f), length * 0.3f, width, SteelBlade, a, ang);
+                    break;
+                }
+                case Weapon.Halberd:
+                {
+                    float length = U * 2.9f;
+                    Vector2 butt = pivot - dir * (U * 0.35f);
+                    Vector2 head = butt + dir * length;
+                    DrawFxRect(Texture2D.whiteTexture, (butt + head) * 0.5f, length, U * 0.14f, WoodShaft, a, ang);                      // 긴 자루
+                    Vector2 axe = head - dir * (U * 0.5f);
+                    float s = side;                                                                                                      // 날은 베는 쪽
+                    DrawFxRect(fxLine, axe + perp * (s * U * 0.4f), U * 1.3f, U * 1.3f, trail, 0.6f * a, ang);
+                    DrawFxRect(Texture2D.whiteTexture, axe + perp * (s * U * 0.27f), U * 0.55f, U * 0.45f, SteelBlade, a, ang);           // 도끼날 몸통
+                    DrawFxRect(Diamond, axe + perp * (s * U * 0.52f), U * 1.05f, U * 0.55f, SteelBlade, a, ang);                          // 도끼날 끝
+                    DrawFxRect(Texture2D.whiteTexture, axe + perp * (s * U * 0.62f), U * 0.6f, U * 0.08f, Color.white, a, ang);
+                    DrawFxRect(Diamond, axe - perp * (s * U * 0.25f), U * 0.26f, U * 0.55f, SteelBlade, a, ang);                          // 뒷갈고리
+                    DrawFxRect(Diamond, head + dir * (U * 0.12f), U * 0.8f, U * 0.24f, SteelBlade, a, ang);                               // 창끝
+                    break;
+                }
+                case Weapon.Katana:
+                {
+                    float length = U * 1.9f, width = U * 0.13f;
+                    DrawFxRect(Texture2D.whiteTexture, hand + dir * (U * 0.12f), U * 0.48f, U * 0.12f, new Color(0.14f, 0.12f, 0.2f), a, ang);        // 긴 자루
+                    DrawFxRect(fxDisc, hand + dir * (U * 0.38f), U * 0.18f, U * 0.34f, new Color(0.85f, 0.7f, 0.35f), a, ang);            // 둥근 코등이
+                    // 살짝 휜 날: 세 마디를 조금씩 꺾는다
+                    Vector2 p0 = hand + dir * (U * 0.42f);
+                    float bend = -side * 7f;
+                    for (int k = 0; k < 3; k++)
+                    {
+                        float segAng = ang + bend * k;
+                        Vector2 d = Polar(segAng);
+                        Vector2 mid = p0 + d * (length / 6f);
+                        DrawFxRect(fxLine, mid, length / 2.4f, width * 3.6f, trail, 0.55f * a, segAng);
+                        DrawFxRect(Texture2D.whiteTexture, mid, length / 3f * 1.08f, width, SteelBlade, a, segAng);
+                        DrawFxRect(Texture2D.whiteTexture, mid, length / 3f * 1.08f, width * 0.35f, Color.white, a, segAng);
+                        p0 += d * (length / 3f);
+                    }
+                    if (swing > 0.4f && swing < 0.95f) DrawFx(fxDisc, p0, U * 0.7f, Color.white, 0.9f * a);                               // 칼끝 반짝임
+                    break;
+                }
+                case Weapon.Cross:
+                {
+                    // 십자가의 긴 쪽을 쥐고 휘두른다: 가로대는 끝 가까이
+                    float length = U * 1.9f, width = U * 0.26f;
+                    Vector2 mid = hand + dir * (length * 0.45f);
+                    DrawFxRect(fxLine, mid, length * 1.2f, width * 3f, trail, 0.65f * a, ang);
+                    DrawFxRect(Texture2D.whiteTexture, mid, length, width, light, a, ang);
+                    DrawFxRect(Texture2D.whiteTexture, hand + dir * (length * 0.68f), width, U * 1.05f, light, a, ang);
+                    DrawFxRect(Texture2D.whiteTexture, mid, length * 0.92f, width * 0.28f, Color.white, a, ang);
+                    DrawFx(fxDisc, hand + dir * (length * 0.68f), U * 0.8f, main, 0.55f * a);
+                    break;
+                }
+            }
+
+            // 베는 순간의 충격
+            if (t > windup + cut * 0.7f)
+            {
+                float k = Mathf.Clamp01((t - windup - cut * 0.7f) / (1f - windup - cut * 0.7f));
+                Vector2 hit = c + e.Dir * (U * 0.9f);
+                DrawFx(fxRing, hit, U * Mathf.Lerp(0.6f, w == Weapon.OneHand || w == Weapon.Katana ? 1.7f : 2.2f, Ease(k)), light, 1f - k);
+                DrawFx(fxDisc, hit, U * 1.1f, trail, 0.6f * (1f - k));
             }
         }
 
@@ -825,6 +1000,11 @@ namespace TextSlayers
                     if (e.Points != null && e.Points.Length > 0) foreach (var pt in e.Points) Burst(th, col, P(pt), unit, 8);
                     else Burst(th, col, c, unit, 14, 1.2f);
                     break;
+                case FieldEffectKind.IceShatter:    // 얼음 파티클: 진행 방향(대상 뒤)으로
+                    for (int k = 0; k < 28; k++) Emit(FxTheme.Ice, col, c + Jitter(unit * 0.2f), unit, Rnd(0.9f, 2f), e.Dir);
+                    break;
+                case FieldEffectKind.FistSlam:
+                case FieldEffectKind.Thrust:
                 case FieldEffectKind.BigSlash:
                 case FieldEffectKind.BladeSwing:
                 case FieldEffectKind.SlantPillar:
@@ -925,6 +1105,9 @@ namespace TextSlayers
                 {
                     float age = b.Time - e.Start - e.Delay;
                     if (age < 0f || age > FxLength(e)) continue;
+                    // 멸령부: 베는 동안 부적빛 파편
+                    if (e.Kind == FieldEffectKind.Blink && e.Target != null && Chance(dt * 35f))
+                        for (int k = 0; k < 3; k++) Emit(FxTheme.Moon, e.Color, P(e.Target.Pos) + Jitter(unit * 0.4f), unit, 0.9f);
                     // 계속 입자가 나오는 연출 (화염 참격 · 연속 주먹)
                     if ((e.Kind == FieldEffectKind.Whirl || e.Kind == FieldEffectKind.Punches) && e.Source != null && Chance(dt * 40f))
                     {
