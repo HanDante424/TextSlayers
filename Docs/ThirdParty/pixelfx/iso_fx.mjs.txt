@@ -1,0 +1,228 @@
+// 비스듬히 내려다본(3/4) 시점 시안. 바닥 좌표 (x, y) + 높이 z → 화면 (x, y*K - z). K = 세로 압축.
+import { Rng, fit, sparkle, rand, clamp, ease, WHITE, TAU, hex } from "./pixelfx/src/core/index.js";
+
+export const K = 0.7;
+const make = (id, size, D, create) => {
+  const m = { name: id, loop: false, options: {}, size: [size, size], origin: [size >> 1, size >> 1], duration: D, fps: 30 };
+  return { id: "custom/" + id, meta: m, mod: { meta: m, create } };
+};
+
+// 바닥 위의 원 (타원으로 보임). front/back 구분 없이 위에서 본 고리
+function ring(p, r, th, color, a) {
+  if (a <= 0 || r < 1) return;
+  const steps = Math.ceil(r * 7);
+  for (let i = 0; i < steps; i++) {
+    const g = (i / steps) * TAU;
+    for (let w = 0; w < th; w += 0.8) p.dot(Math.cos(g) * (r - w), Math.sin(g) * (r - w) * K, color, a);
+  }
+}
+function floorDisc(p, r, color, a) {
+  for (let y = -Math.ceil(r * K); y <= r * K; y++)
+    for (let x = -Math.ceil(r); x <= r; x++) {
+      const d = Math.hypot(x / r, y / (r * K));
+      if (d <= 1) p.dot(x, y, color, a * (d < 0.7 ? 1 : (1 - d) / 0.3));
+    }
+}
+// 사방으로 퍼지는 덩어리: 바닥 속도 + 약한 상승
+function blobs(R, n, spd, rise, life, size) {
+  return Array.from({ length: n }, () => {
+    const a = R.range(0, TAU), v = R.range(spd * 0.25, spd);
+    return { vx: Math.cos(a) * v, vy: Math.sin(a) * v, vz: R.range(rise * 0.3, rise), life: R.range(life * 0.6, life), size: R.range(size * 0.6, size), seed: R.next() };
+  });
+}
+const place = (q, t, drag, gravity = 0) => {
+  const go = (1 - Math.exp(-drag * t)) / drag;
+  const z = Math.max(0, q.vz * go - 0.5 * gravity * t * t);
+  return [q.vx * go, q.vy * go * K - z];
+};
+
+export function isoExplosion(palette, smoke, id) {
+  return make(id, 170, 1.15, () => {
+    const C = fit(palette, 8), R = new Rng(5), S = smoke.map(hex);
+    const fire = blobs(R, 46, 190, 60, 0.7, 12), soot = blobs(R, 34, 190, 55, 1.15, 12), sparks = blobs(R, 70, 340, 150, 0.65, 1), rocks = blobs(R, 18, 150, 230, 0.85, 2.2), embers = blobs(R, 30, 120, 90, 1.1, 1);
+    let t = 0;
+    return {
+      update(dt) { t += dt; },
+      draw(p) {
+        floorDisc(p, 34, hex("#0b0910"), 0.6 * (1 - clamp((t - 0.7) / 0.4)));
+        const k = clamp(t / 0.3);
+        if (k < 1) {
+          ring(p, 10 + 58 * ease.outCubic(k), 3 * (1 - k) + 1, k < 0.4 ? C[7] : C[4], 1.1 - k);
+          p.glow(0, 0, 70, C[4], 0.6 * (1 - k));
+        }
+        for (const q of soot) {
+          const u = (t - 0.12) / q.life;
+          if (u <= 0 || u >= 1) continue;
+          const [x, y] = place(q, t - 0.12, 5);
+          p.disc(x, y - 14 * u, q.size * (0.6 + 0.6 * u), S[q.seed < 0.5 ? 0 : 1], 0.65 * (1 - u));
+        }
+        for (const q of fire) {
+          const u = t / q.life;
+          if (u >= 1) continue;
+          const [x, y] = place(q, t, 4.5);
+          const r = q.size * (1 - u * 0.7);
+          p.disc(x, y, r, C[clamp(Math.round(6 - u * 5), 1, 6)], 1);
+          if (u < 0.4) p.disc(x - r * 0.2, y - r * 0.25, r * 0.5, C[7], 1);
+        }
+        for (const q of sparks) {
+          if (t >= q.life) continue;
+          const [x, y] = place(q, t, 5, 300), [px, py] = place(q, Math.max(0, t - 0.03), 5, 300);
+          p.line(px, py, x, y, t < q.life * 0.5 ? C[6] : C[4], 1 - t / q.life);
+        }
+        for (const q of rocks) {                       // 튀어 올랐다 떨어지는 파편
+          if (t >= q.life) continue;
+          const [x, y] = place(q, t, 3, 520);
+          p.disc(x, y, q.size + 0.6, hex("#17121d"), 1);
+          p.disc(x, y - 0.6, q.size * 0.7, hex("#6a5f78"), 1);
+          if (t < q.life * 0.5) p.dot(x - 1, y - 1, C[4], 1);
+        }
+        for (const q of embers) {                      // 남아 깜빡이는 불씨
+          if (t >= q.life || Math.floor(t * 18 + q.seed * 9) % 3 === 0) continue;
+          const [x, y] = place(q, t, 4, 60);
+          p.dot(x, y, C[q.seed < 0.5 ? 5 : 4], 1 - t / q.life);
+        }
+        if (t < 0.08) p.circle(0, 0, 20 * (1 - t / 0.08) + 5, WHITE);
+      },
+    };
+  });
+}
+
+export function isoSlam(palette, stone, id) {
+  return make(id, 190, 1.2, () => {
+    const C = fit(palette, 8), R = new Rng(11), S = stone.map(hex);
+    const cracks = Array.from({ length: 11 }, (_, i) => {
+      let a = (i / 11) * TAU + R.range(-0.2, 0.2), x = 0, y = 0;
+      const pts = [[0, 0]], len = R.range(30, 70);
+      for (let d = 0; d < len; d += 9) { a += R.range(-0.45, 0.45); x += Math.cos(a) * 9; y += Math.sin(a) * 9; pts.push([x, y * K]); }
+      return pts;
+    });
+    const dust = blobs(R, 44, 260, 12, 0.9, 9), rocks = blobs(R, 24, 170, 190, 0.8, 3);
+    let t = 0;
+    return {
+      update(dt) { t += dt; },
+      draw(p) {
+        const fade = 1 - clamp((t - 0.75) / 0.45), grow = ease.outCubic(clamp(t / 0.14));
+        for (const c of cracks)
+          for (let i = 1; i < c.length * grow; i++) {
+            p.line(c[i - 1][0], c[i - 1][1] + 1, c[i][0], c[i][1] + 1, S[2], fade);
+            p.line(c[i - 1][0], c[i - 1][1], c[i][0], c[i][1], t < 0.35 ? (i < 3 ? C[7] : C[5]) : S[1], fade);
+          }
+        const k = clamp(t / 0.4);
+        if (k < 1) {
+          ring(p, 12 + 70 * ease.outCubic(k), 4 * (1 - k) + 1, k < 0.35 ? C[7] : C[5], 1.15 - k);
+          ring(p, 8 + 46 * ease.outCubic(k), 2, C[4], 0.8 - k);
+        }
+        for (const q of dust) {
+          const u = t / q.life;
+          if (u >= 1) continue;
+          const [x, y] = place(q, t, 5);
+          p.disc(x, y, q.size * (0.5 + u * 0.8), S[q.seed < 0.5 ? 0 : 1], 0.55 * (1 - u));
+        }
+        for (const q of rocks) {
+          if (t >= q.life) continue;
+          const [x, y] = place(q, t, 3, 520);
+          p.disc(x, y, q.size, S[1], 1);
+          p.dot(x - 1, y - 1, C[5], 1);
+        }
+        if (t < 0.1) {
+          p.circle(0, 0, 16 * (1 - t / 0.1) + 5, WHITE);
+          p.glow(0, 0, 60, C[5], 0.9);
+        }
+      },
+    };
+  });
+}
+
+export function isoHeal(palette, id) {
+  return make(id, 120, 1.4, () => {
+    const C = fit(palette, 8), R = new Rng(3);
+    const motes = Array.from({ length: 44 }, () => ({ a: R.range(0, TAU), d: Math.sqrt(R.next()) * 36, at: R.range(0, 0.7), v: R.range(18, 38), plus: R.chance(0.7) }));
+    let t = 0;
+    return {
+      update(dt) { t += dt; },
+      draw(p) {
+        const fade = 1 - clamp((t - 1.0) / 0.4), k = ease.outCubic(clamp(t / 0.45));
+        floorDisc(p, 38 * k, C[3], 0.28 * fade);
+        ring(p, 40 * k, 2.4, C[5], fade);
+        ring(p, 33 * k, 1, C[6], 0.7 * fade);
+        p.glow(0, 0, 44, C[4], 0.3 * fade);
+        for (const m of motes) {
+          const u = (t - m.at) / 0.6;
+          if (u <= 0 || u >= 1) continue;
+          const x = Math.cos(m.a) * m.d * k, y = Math.sin(m.a) * m.d * k * K - m.v * u, a = 1 - u;
+          p.dot(x, y, C[7], a);
+          if (m.plus) for (let n = -4; n <= 4; n++) for (let w = 0; w < 2; w++) { p.dot(x + n, y + w, C[Math.abs(n) < 2 ? 7 : 5], a); p.dot(x + w, y + n, C[Math.abs(n) < 2 ? 7 : 5], a); }
+        }
+      },
+    };
+  });
+}
+
+export function isoLightning() {
+  return make("isoLightning", 190, 0.8, () => {
+    const R = new Rng(9), C = ["#1a1450", "#3a2ab0", "#4a7cf0", "#9ad0ff", "#e8f8ff"].map(hex);
+    const zig = () => {
+      const pts = [[0, 0]];
+      let x = 0;
+      for (let y = -9; y >= -90; y -= 9) { x += R.range(-9, 9); pts.push([x, y]); }
+      return pts;
+    };
+    const bolt = zig(), arcs = Array.from({ length: 7 }, (_, i) => {
+      let a = (i / 7) * TAU + R.range(-0.3, 0.3), x = 0, y = 0;
+      const pts = [[0, 0]];
+      for (let d = 0; d < R.range(26, 56); d += 8) { a += R.range(-0.7, 0.7); x += Math.cos(a) * 8; y += Math.sin(a) * 8; pts.push([x, y * K]); }
+      return pts;
+    });
+    let t = 0;
+    const path = (p, pts, th, c, a) => {
+      for (let i = 1; i < pts.length; i++) {
+        for (let w = 0; w < th; w++) p.line(pts[i - 1][0] + w, pts[i - 1][1], pts[i][0] + w, pts[i][1], c, a);
+      }
+    };
+    return {
+      update(dt) { t += dt; },
+      draw(p) {
+        const a = 1 - clamp((t - 0.25) / 0.45);
+        floorDisc(p, 30, hex("#0a0820"), 0.55 * a);
+        const k = clamp(t / 0.3);
+        if (k < 1) ring(p, 8 + 52 * ease.outCubic(k), 2.5 * (1 - k) + 1, C[3], 1.1 - k);
+        for (const c of arcs) if (Math.floor(t * 22 + c.length) % 3) path(p, c, 1, C[3], a);
+        if (t < 0.4) {
+          const f = 1 - clamp((t - 0.15) / 0.25);
+          path(p, bolt, 5, C[2], f);
+          path(p, bolt.map(([x, y]) => [x + 1, y]), 3, C[4], f);
+        }
+        p.glow(0, 0, 60, C[2], 0.7 * a);
+        if (t < 0.1) p.circle(0, 0, 15 * (1 - t / 0.1) + 4, WHITE);
+      },
+    };
+  });
+}
+
+// 착지 · 도약 충격: 낮게 퍼지는 먼지와 고리
+export function isoLanding() {
+  return make("isoLanding", 150, 0.9, () => {
+    const R = new Rng(14), S = ["#9088a4", "#6b6280", "#2f2a3a", "#e6e1ee"].map(hex);
+    const dust = blobs(R, 34, 220, 8, 0.85, 7), grit = blobs(R, 20, 150, 110, 0.6, 1);
+    let t = 0;
+    return {
+      update(dt) { t += dt; },
+      draw(p) {
+        const k = clamp(t / 0.38);
+        if (k < 1) ring(p, 8 + 46 * ease.outCubic(k), 2.5 * (1 - k) + 1, k < 0.4 ? S[3] : S[0], 1.1 - k);
+        for (const q of dust) {
+          const u = t / q.life;
+          if (u >= 1) continue;
+          const [x, y] = place(q, t, 6);
+          p.disc(x, y, q.size * (0.5 + u * 0.7), S[q.seed < 0.5 ? 0 : 1], 0.55 * (1 - u));
+        }
+        for (const q of grit) {
+          if (t >= q.life) continue;
+          const [x, y] = place(q, t, 3, 480);
+          p.dot(x, y, S[2], 1);
+          p.dot(x, y - 1, S[1], 1);
+        }
+      },
+    };
+  });
+}

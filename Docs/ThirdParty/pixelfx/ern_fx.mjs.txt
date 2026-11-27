@@ -1,0 +1,65 @@
+// 에른 전용 이펙트. 좌표는 발 위치 기준 도트, 오른쪽 방향. 호의 값은 GameView 의 FireSlashCleave 와 같아야 한다.
+import { Particles, P, PF, Rng, fit, sparkle, rand, clamp, ease, WHITE } from "./pixelfx/src/core/index.js";
+import { swing, onSwing, travel, smear, glowAlong } from "./pixelfx/src/fx/melee/_lib.js";
+
+const FIRE = ["#14040a", "#3a0a14", "#8a1a10", "#c9281f", "#f2561d", "#ff8a2a", "#ffc23d", "#fff3a6"];
+
+// 파이어 슬래시: 내려베기 + 아주 많은 화염 (불길 · 불씨 · 불똥)
+export function fireSlash(cx = -22, R = 104, W = 34, id = "fireSlash") {
+  const cy = -28, a0 = -2.007, span = 3.403;
+  const wind = 0.03, sweep = 0.13, hang = 0.1, tear = 0.3, D = 1.05;
+  const pad = 46, size = (R + pad) * 2, origin = [R + pad - cx, R + pad - cy];
+  const m = { name: id, loop: false, options: {}, size: [size, size], origin, duration: D, fps: 30 };
+  const create = () => {
+    const C = fit(FIRE, 8), Rg = new Rng(27), ps = new Particles({ rng: Rg, ground: () => 1000, sparks: [WHITE, C[7], C[6], C[4]] });
+    const A = swing({ cx, cy, R, sy: 1, rot: 0, a0, dir: 1, span });
+    const head = (t) => ease.inQuad(clamp((t - wind) / sweep));
+    const gone = (t) => clamp((t - wind - sweep - hang) / tear);
+    let t = 0, lit = 0;
+    return {
+      update(dt) {
+        t += dt;
+        // 날이 지나가는 자리마다 불길 · 불씨 · 불똥을 잔뜩 남긴다
+        const U = head(t);
+        for (; lit < U; lit += 0.011 * (104 / R)) {
+          const tr = travel({ ...A, R: R - Rg.range(0, W * 0.9) }, lit * span);
+          ps.spawn(P.FIRE, tr.x + Rg.range(-3, 3), tr.y + Rg.range(-3, 3), tr.dx * Rg.range(0, 45) + Rg.range(-22, 22), tr.dy * Rg.range(0, 45) - Rg.range(10, 45), Rg.range(0.28, 0.65), 0, Rg.range(3.5, 7.5), 0, Rg.chance(0.2) ? PF.SMOKES : 0);
+          ps.spawn(P.EMBER, tr.x, tr.y, Rg.range(-45, 45), -Rg.range(20, 90), Rg.range(0.45, 0.95), Rg.chance(0.5) ? C[6] : C[5], Rg.range(1, 2));
+          if (Rg.chance(0.7)) {
+            const a = Math.atan2(tr.y - cy, tr.x - cx) + Rg.range(-0.4, 0.4), sp = Rg.range(90, 230);
+            ps.spawn(P.MOTE, tr.x, tr.y, Math.cos(a) * sp, Math.sin(a) * sp, Rg.range(0.18, 0.45), Rg.chance(0.5) ? C[7] : C[6], Rg.range(0.8, 1.4));
+          }
+        }
+        // 잔흔이 흩어지는 동안에도 불길이 피어오른다
+        if (t > wind + sweep && t < wind + sweep + hang + tear * 0.8)
+          for (let i = 0; i < 2; i++) {
+            const tr = travel({ ...A, R: R - Rg.range(0, W * 0.7) }, Rg.range(0.15, 1) * span);
+            ps.spawn(P.FIRE, tr.x, tr.y, Rg.range(-16, 16), -Rg.range(20, 55), Rg.range(0.22, 0.45), 0, Rg.range(2.5, 5.5));
+          }
+        ps.update(dt);
+      },
+      draw(p) {
+        const U = span * head(t), k = gone(t);
+        if (U > 0.02 && k < 1) {
+          smear(p, A, 0, U, W, (u, r, out) => {
+            const v = u / U, w = W * Math.pow(Math.sin(Math.PI * Math.pow(clamp(v), 1.7)), 0.55);
+            if (w < 0.5) return;
+            const q = (R - r) / w;
+            if (q < 0 || q > 1) return;
+            const n = rand(Math.floor(u * 40), Math.floor(r), 7);
+            if (k > 0 && u / span < k * 1.2 - n * 0.2) return;
+            out.c = C[q < 0.1 ? 7 : q < 0.22 ? 6 : q < 0.38 ? 5 : q < 0.56 ? 4 : q < 0.78 ? 3 : 2];
+            out.a = Math.min(1, v / 0.25);
+          });
+          glowAlong(p, A, R - 4, Math.max(0, k * 1.2 * span - 0.3), U, 20, C[4], (u) => 0.45 * (u / U));
+          if (t < wind + sweep + 0.08) {
+            const [x, y] = onSwing(A, R - 3, U);
+            sparkle(p, x, y, 10, C[7], C[5], 0.5);
+          }
+        }
+        ps.draw(p);
+      },
+    };
+  };
+  return { id: "custom/" + id, meta: m, mod: { meta: m, create } };
+}

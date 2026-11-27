@@ -34,11 +34,31 @@ namespace TextSlayers
             return swordTexture;
         }
 
-        /// <summary>손 위치 hand 에서 angleDeg 방향으로 대검 도트를 그린다. size = 도트 한 칸의 UI 크기.</summary>
-        static void DrawSwordSprite(Texture2D texture, Vector2 hand, float angleDeg, float size, float alpha)
+        // 에른 검 도트 (Docs/Design/Ern_Sword_64_Base.png · _Flame.png). 원본이 이미 오른쪽을 향한다.
+        const float ErnSwordGripY = 31f;   // 손잡이 가로축 (손 위치 x 와 칼끝 길이는 대검과 같은 12 · 47)
+
+        static readonly System.Collections.Generic.Dictionary<string, Texture2D> weaponTextures = new System.Collections.Generic.Dictionary<string, Texture2D>();
+
+        /// <summary>오른쪽을 향해 그려진 64×64 무기 도트를 그대로 읽는다.</summary>
+        static Texture2D WeaponTexture(string name)
+        {
+            if (weaponTextures.TryGetValue(name, out var texture)) return texture;
+            var asset = Resources.Load<TextAsset>("FieldSprites/" + name);
+            if (asset != null)
+            {
+                texture = NewFieldSpriteTexture(name);
+                if (!ImageConversion.LoadImage(texture, asset.bytes)) { Object.Destroy(texture); texture = null; }
+            }
+            if (texture == null) Debug.LogWarning($"[TextSlayers] 무기 도트를 읽지 못했습니다. ({name})");
+            weaponTextures.Add(name, texture);
+            return texture;
+        }
+
+        /// <summary>손 위치 hand 에서 angleDeg 방향으로 무기 도트를 그린다. size = 도트 한 칸의 UI 크기.</summary>
+        static void DrawSwordSprite(Texture2D texture, Vector2 hand, float angleDeg, float size, float alpha, float gripY = SwordGripY)
         {
             Vector2 dir = Polar(angleDeg), perp = new Vector2(-dir.y, dir.x);
-            Vector2 center = hand + dir * ((SwordCanvas * 0.5f - SwordGripX) * size) + perp * ((SwordCanvas * 0.5f - SwordGripY) * size);
+            Vector2 center = hand + dir * ((SwordCanvas * 0.5f - SwordGripX) * size) + perp * ((SwordCanvas * 0.5f - gripY) * size);
             DrawFxRect(texture, center, SwordCanvas * size, SwordCanvas * size, Color.white, alpha, angleDeg);
         }
 
