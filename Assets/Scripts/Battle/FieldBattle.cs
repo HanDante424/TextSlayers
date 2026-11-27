@@ -171,6 +171,7 @@ namespace TextSlayers
         public bool SuperArmor => ArmorTimer > 0f || MoonShadow || Glutton;   // 월영 · 글러트니: 상시 슈퍼아머
         public float Toughness => Mathf.Clamp((ToughUpTimer > 0f ? ToughUp : 0f) - (ToughDownTimer > 0f ? ToughDown : 0f), 0f, 100f);
         public int SpecialAmmo;               // 장전된 특수탄 (총잡이): 다음 기본 공격이 특수탄
+        public bool HasApRound => Passive != null && Passive.Id == "vd_ap_round";   // 철갑탄: 마지막에 한 발 추가
         public FieldSkillDef SpecialSkill;
         // 띄움 · 맵 이탈 · 잡힘 · 분산 연타
         public float AirTimer, AirTotal, AirHeight;     // 공중 (그림에서 위로 띄움). 띄워진 적은 행동 불가
@@ -1204,7 +1205,7 @@ namespace TextSlayers
                     // 특수탄: 0.5초 장전한 뒤(사용자 2026-11-27), 다음 기본 공격들이 특수탄으로 나간다 (사용자 2026-11-26)
                     if (u.ReloadTimer > 0f || u.SpecialAmmo > 0 || Vector2.Distance(u.Pos, target.Pos) > s.Range) continue;
                     u.SpecialSkill = s;
-                    u.SpecialAmmo = Mathf.Max(1, s.Shots);
+                    u.SpecialAmmo = Mathf.Max(1, s.Shots) + (u.HasApRound ? 1 : 0);
                     u.ReloadTimer = SpecialReloadTime;
                     u.LoadingSpecial = true;
                     u.Cooldowns[i] = s.EffectiveCooldown;
@@ -1223,7 +1224,8 @@ namespace TextSlayers
 
             if (u.SpecialAmmo > 0 && !u.MoonShadow && u.ReloadTimer <= 0f)
             {
-                var sp = u.SpecialSkill;
+                // 철갑탄 패시브: 특수탄을 다 쏜 뒤 마지막 한 발
+                var sp = u.HasApRound && u.SpecialAmmo == 1 ? FieldData.Skill("vd_ap_shot") ?? u.SpecialSkill : u.SpecialSkill;
                 if (Vector2.Distance(u.Pos, target.Pos) > sp.Range) return false;
                 Vector2 dir = target.Pos - u.Pos;
                 if (dir.sqrMagnitude > 0.0001f) u.Facing = dir.normalized;

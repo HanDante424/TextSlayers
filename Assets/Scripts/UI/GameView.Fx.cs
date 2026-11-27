@@ -814,7 +814,6 @@ namespace TextSlayers
             Color trail = main;
             switch (w)
             {
-                case Weapon.Halberd: from = -130f; to = 90f; windup = 0.25f; reach = 3.1f; break;
                 case Weapon.Katana: from = -100f; to = 95f; windup = 0.14f; cut = 0.3f; reach = 2.3f; break;
                 case Weapon.Cross: from = -120f; to = 70f; reach = 2.0f; break;
                 default: from = -95f; to = 75f; windup = 0.16f; cut = 0.4f; reach = 1.8f; break;
@@ -845,22 +844,6 @@ namespace TextSlayers
                 case Weapon.OneHand:
                     DrawOneHandSword(hand, ang, U, trail, a);
                     break;
-                case Weapon.Halberd:
-                {
-                    float length = U * 2.9f;
-                    Vector2 butt = pivot - dir * (U * 0.35f);
-                    Vector2 head = butt + dir * length;
-                    DrawFxRect(Texture2D.whiteTexture, (butt + head) * 0.5f, length, U * 0.14f, WoodShaft, a, ang);                      // 긴 자루
-                    Vector2 axe = head - dir * (U * 0.5f);
-                    float s = side;                                                                                                      // 날은 베는 쪽
-                    DrawFxRect(fxLine, axe + perp * (s * U * 0.4f), U * 1.3f, U * 1.3f, trail, 0.6f * a, ang);
-                    DrawFxRect(Texture2D.whiteTexture, axe + perp * (s * U * 0.27f), U * 0.55f, U * 0.45f, SteelBlade, a, ang);           // 도끼날 몸통
-                    DrawFxRect(Diamond, axe + perp * (s * U * 0.52f), U * 1.05f, U * 0.55f, SteelBlade, a, ang);                          // 도끼날 끝
-                    DrawFxRect(Texture2D.whiteTexture, axe + perp * (s * U * 0.62f), U * 0.6f, U * 0.08f, Color.white, a, ang);
-                    DrawFxRect(Diamond, axe - perp * (s * U * 0.25f), U * 0.26f, U * 0.55f, SteelBlade, a, ang);                          // 뒷갈고리
-                    DrawFxRect(Diamond, head + dir * (U * 0.12f), U * 0.8f, U * 0.24f, SteelBlade, a, ang);                               // 창끝
-                    break;
-                }
                 case Weapon.Katana:
                 {
                     float length = U * 1.9f, width = U * 0.13f;

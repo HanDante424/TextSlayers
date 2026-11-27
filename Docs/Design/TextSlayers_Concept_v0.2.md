@@ -696,6 +696,7 @@ v0.1 의 7종에서 **MP 를 쓰지 않고**(`[해석]` 쿨다운으로 대체) 
 | 멜 | [Mel_Valentina_PixelLab_64.png](Mel_Valentina_PixelLab_64.png) |
 | 벤데타 | [Vendetta_PixelLab_64.png](Vendetta_PixelLab_64.png) |
 | 파라켈수스 | [Paracelsus_PixelLab_64.png](Paracelsus_PixelLab_64.png) |
+| 메일 보레아 | [Mail_Borea_PixelLab_64.png](Mail_Borea_PixelLab_64.png) |
 
 | 항목 | 제작 기준 |
 |---|---|

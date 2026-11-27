@@ -547,8 +547,11 @@ namespace TextSlayers
         const float ShakeTime = 0.2f, ShakePixels = 5f;
         const float GhostStep = 0.025f;      // 넉백 잔상 간격(초)
 
+        static FieldBattle currentField;   // 지금 그리는 전투 (유닛 표시에 쓴다)
+
         static void DrawField(Rect r, float unit, FieldBattle b)
         {
+            currentField = b;
             // 큰 넉백: 화면(필드)만 살짝 흔든다. 클릭 판정 좌표는 바꾸지 않는다.
             float since = b.Time - b.LastHeavyKnockTime;
             if (since >= 0f && since < ShakeTime)
@@ -701,6 +704,14 @@ namespace TextSlayers
             // 상태 표시: 기절(노란 고리) · 표식(빨간 마름모)
             if (u.StunTimer > 0f || u.Marked) EnsureFx();
             float headY = sprite == null ? body.y : Mathf.Max(FieldSpriteHead(spriteRect), field.y + unit * 0.25f);
+            // 도트 캐릭터: 이름이 있던 자리에 스킬 쿨타임 칸. 필드 위로 넘치면 발밑에
+            float slotTop = -1f;
+            if (sprite != null)
+            {
+                slotTop = FieldSpriteHead(spriteRect) - CooldownRowHeight - 1f;
+                if (slotTop < field.y) slotTop = body.yMax + 16f;
+                else headY = Mathf.Max(slotTop, field.y + unit * 0.25f);   // 기절 · 표식은 칸 위에
+            }
             if (u.StunTimer > 0f)
                 DrawSheet("stun", new Vector2(cx, headY - unit * 0.25f), unit, now, Color.white, false, true);
             if (u.Marked)
@@ -710,6 +721,7 @@ namespace TextSlayers
             Fill(bar, BarBack);
             Fill(new Rect(bar.x, bar.y, bar.width * (u.Immortal ? 1f : u.HpRatio), bar.height), u.IsPlayer ? AllyHpColor : EnemyHpColor);
             if (sprite == null) GUI.Label(body, ShortName(u), small);   // 도트가 있는 캐릭터는 이름을 쓰지 않는다 (사용자 2026-11-27)
+            else if (currentField != null) DrawCooldownSlots(currentField, u, cx, slotTop, now);
 
             // 총잡이: 장전 막대 (장전 중) · 남은 기본탄
             if (u.Def != null && u.Def.Gunner)
@@ -724,8 +736,11 @@ namespace TextSlayers
                 else if (u.SpecialAmmo > 0 && u.SpecialSkill != null)
                 {
                     // 특수탄이 장전돼 있으면 특수탄 수를 그 탄의 색으로 (사용자 2026-11-27)
-                    float pip = d / Mathf.Max(1, u.SpecialSkill.Shots);
-                    for (int i = 0; i < u.SpecialAmmo; i++) Fill(new Rect(rb.x + i * pip + 1, rb.y, pip - 2, rb.height), u.SpecialSkill.FxColor);
+                    // 왼쪽부터 쓰고, 철갑탄(금색)은 맨 오른쪽에 하나 더 (마지막에 나간다)
+                    int shots = Mathf.Max(1, u.SpecialSkill.Shots), slots = shots + (u.HasApRound ? 1 : 0);
+                    float pip = d / slots;
+                    for (int i = Mathf.Max(0, slots - u.SpecialAmmo); i < slots; i++)
+                        Fill(new Rect(rb.x + i * pip + 1, rb.y, pip - 2, rb.height), i >= shots ? SkillColor.Gold : u.SpecialSkill.FxColor);
                 }
                 else
                 {
