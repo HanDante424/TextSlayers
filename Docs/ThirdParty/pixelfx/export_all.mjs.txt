@@ -1,0 +1,102 @@
+// 게임용 이펙트 시트를 한 번에 내보내고, 프레임 표(C#)를 만든다.
+// 실행: node export_all.mjs <TextSlayersNew 경로>
+import { loadEffect, renderFrames, spriteSheet, save } from "./pixelfx/tools/lib/fxlib.mjs";
+import { encodePNG } from "./pixelfx/tools/lib/png.mjs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { wave, waveDust, darkPillar, spin, smashArc } from "./stium_fx.mjs";
+
+const here = dirname(fileURLToPath(import.meta.url)), project = process.argv[2];
+const WHITE = ["#303030", "#505050", "#787878", "#a0a0a0", "#c8c8c8", "#e0e0e0", "#f4f4f4", "#ffffff"];
+const VOID = ["#12061f", "#2a0f4a", "#4a1d7a", "#6e2fb0", "#9a52e0", "#c48cff", "#e6c8ff", "#ffffff"];
+
+// from~to: 잘라 쓸 초. center: 기준점을 보이는 영역의 가운데로 (머리 위 표시용)
+const SPECS = [
+  { key: "boom", fx: "explosions/small-explosion", to: 1.4, fps: 20, options: { size: 0.6, seed: 7 } },
+  { key: "boomDark", fx: "explosions/small-explosion", to: 1.4, fps: 20, options: { size: 0.6, seed: 7, palette: VOID, stone: "#2a1740" }, violet: true },
+  { key: "hit", fx: "impacts/crit-hit", to: 0.6, fps: 20, options: { palette: WHITE } },
+  { key: "slam", fx: "impacts/ground-slam", to: 1.2, fps: 18, options: { reach: 60 } },
+  { key: "landing", fx: "impacts/heavy-landing", to: 0.9, fps: 18 },
+  { key: "iceShatter", fx: "ice/ice-shatter", from: 0.7, to: 1.7, fps: 18 },
+  { key: "frostNova", fx: "ice/frost-nova", to: 1.6, fps: 16, options: { reach: 90 } },
+  { key: "heal", fx: "holy/heal-aoe", to: 1.4, fps: 14, options: { reach: 34 } },
+  { key: "shield", fx: "holy/divine-shield", to: 2.4, fps: 10, options: { palette: WHITE } },
+  { key: "buff", fx: "holy/blessing", to: 1.5, fps: 12, options: { palette: WHITE } },
+  { key: "stun", fx: "status/stunned", to: 2.0, fps: 12, center: true },
+  { key: "cleave", fx: "melee/cleave-reap", to: 1.0, fps: 30 },
+  { key: "stiumSpin", make: spin, to: 0.85, fps: 30 },
+  { key: "stiumSmash", make: smashArc, to: 0.75, fps: 30 },
+  { key: "darkWave", make: wave, to: 0.3, fps: 20 },
+  { key: "waveDust", make: waveDust, to: 0.55, fps: 18 },
+  { key: "darkPillar", make: darkPillar, to: 0.85, fps: 24 },
+  { key: "darkSlam", fx: "impacts/ground-slam", to: 1.2, fps: 18, options: { reach: 80, palette: ["#1a0b33", "#3b1a66", "#6e2fb0", "#9a52e0", "#c48cff", "#ecd4ff", "#ffffff"], stone: "#6a3fa0" } },
+];
+
+const rows = [], shots = [];
+let bytes = 0;
+for (const s of SPECS) {
+  const fx = s.make ? s.make() : await loadEffect(s.fx);
+  const r = renderFrames(fx, { fps: s.fps, bg: "none", actor: false, options: s.options });
+  // 불꽃 색은 팔레트를 따르지 않으므로, 따뜻한 색을 보라로 바꾼다
+  if (s.violet)
+    for (const f of r.frames)
+      for (let i = 0; i < f.clear.length; i += 4) {
+        const R = f.clear[i], G = f.clear[i + 1], B = f.clear[i + 2];
+        if (R > B + 30) { f.clear[i] = Math.round(R * 0.62); f.clear[i + 1] = Math.round(G * 0.3); f.clear[i + 2] = Math.min(255, Math.round(R * 0.95 + G * 0.15)); }
+      }
+  const first = Math.round((s.from ?? 0) * s.fps);
+  const frames = r.frames.slice(first, first + Math.round((s.to - (s.from ?? 0)) * s.fps));
+  let x0 = r.w, y0 = r.h, x1 = -1, y1 = -1;
+  for (const f of frames)
+    for (let y = 0; y < r.h; y++)
+      for (let x = 0; x < r.w; x++)
+        if (f.clear[(y * r.w + x) * 4 + 3] >= 24) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  const crop = (src) => {
+    const d = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) d.set(src.subarray(((y + y0) * r.w + x0) * 4, ((y + y0) * r.w + x0 + w) * 4), y * w * 4);
+    return d;
+  };
+  const cut = { ...r, w, h, n: frames.length, frames: frames.map((f) => ({ ...f, clear: crop(f.clear), color: crop(f.color) })) };
+  const sheet = spriteSheet(fx, cut, s.key), cols = sheet.json.meta.pixelfx.columns;
+  save(join(project, "Assets/Resources/FieldFx", `${s.key}.bytes`), sheet.png);
+  const [ox, oy] = fx.meta.origin;
+  const px = s.center ? Math.round(w / 2) : ox - x0, py = s.center ? Math.round(h / 2) : oy - y0;
+  const size = sheet.json.meta.size;
+  bytes += size.w * size.h * 4;
+  console.log(s.key, "frames", cut.n, "frame", w, h, "sheet", size.w, size.h);
+  rows.push(`            { "${s.key}", new FxSheet("${s.key}", ${cut.n}, ${cols}, ${w}, ${h}, ${px}, ${py}, ${s.fps}f) },   // ${s.fx ?? "stium_fx"}`);
+  shots.push(cut);
+}
+console.log("texture memory MB", (bytes / 1048576).toFixed(1));
+
+save(join(project, "Assets/Scripts/UI/GameView.FxSheets.Table.cs"), `// 자동 생성: 시트 내보내기 스크립트가 만든 프레임 표. 손으로 고치지 않는다.
+using System.Collections.Generic;
+
+namespace TextSlayers
+{
+    public static partial class GameView
+    {
+        static readonly Dictionary<string, FxSheet> FxSheets = new Dictionary<string, FxSheet>
+        {
+${rows.join("\n")}
+        };
+    }
+}
+`);
+
+// 확인용: 시트마다 프레임 8장
+const N = 8, CW = 200, CH = 170, W = N * CW, H = shots.length * CH, img = new Uint8ClampedArray(W * H * 4);
+for (let i = 0; i < W * H; i++) img.set([22, 20, 30, 255], i * 4);
+shots.forEach((r, row) => {
+  for (let k = 0; k < N; k++) {
+    const f = r.frames[Math.floor(((k + 0.3) / N) * r.n)];
+    for (let y = 0; y < CH; y++) for (let x = 0; x < CW; x++) {
+      const sx = x - Math.floor((CW - r.w) / 2), sy = y - Math.floor((CH - r.h) / 2);
+      if (sx < 0 || sy < 0 || sx >= r.w || sy >= r.h) continue;
+      const s = (sy * r.w + sx) * 4, a = f.clear[s + 3] / 255, d = ((row * CH + y) * W + k * CW + x) * 4;
+      for (let c = 0; c < 3; c++) img[d + c] = f.clear[s + c] * a + img[d + c] * (1 - a);
+    }
+  }
+});
+save(join(here, "fxout", "all.png"), encodePNG(W, H, img));

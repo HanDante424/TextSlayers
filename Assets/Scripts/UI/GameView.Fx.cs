@@ -113,20 +113,26 @@ namespace TextSlayers
         {
             switch (e.Kind)
             {
-                case FieldEffectKind.Spin: return FxSpin * FxTimeMul;
-                case FieldEffectKind.Smash: return FxSmash * FxTimeMul;
-                case FieldEffectKind.Burst: return FxBurst * FxTimeMul;
+                case FieldEffectKind.Spin: return IsStium(e) ? SheetTime("stiumSpin") : FxSpin * FxTimeMul;
+                case FieldEffectKind.Smash: return IsStium(e) ? SheetTime("boomDark") : SheetTime("slam");
+                case FieldEffectKind.Burst: return SheetTime(BurstSheet(e));
                 case FieldEffectKind.Pulse: return FxPulse * FxTimeMul;
                 case FieldEffectKind.Grasp: return FxGrasp * FxTimeMul;
                 case FieldEffectKind.Harvest: return FxHarvest * FxTimeMul;
                 case FieldEffectKind.Slash: return FxSlash * FxTimeMul;
-                case FieldEffectKind.Swing: return HasWeaponSwing(e) ? WeaponSwingTime(WeaponOf(e)) : FxSwing * FxTimeMul;
+                case FieldEffectKind.Swing:
+                {
+                    if (!HasWeaponSwing(e)) return FxSwing * FxTimeMul;
+                    var weapon = WeaponOf(e);
+                    // 대검은 내려베기 잔흔이 남는다
+                    return weapon == Weapon.GreatSword ? SheetTime("cleave") : WeaponSwingTime(weapon);
+                }
                 case FieldEffectKind.Multi: return MultiStep(e) * Mathf.Max(1, e.Count) + FxMultiOne * FxTimeMul;
-                case FieldEffectKind.Trail:
-                case FieldEffectKind.Leap: return Mathf.Max(0.1f, e.Duration) + FxAfter * FxTimeMul;
+                case FieldEffectKind.Trail: return Mathf.Max(0.1f, e.Duration) + FxAfter * FxTimeMul;
+                case FieldEffectKind.Leap: return Mathf.Max(0.1f, e.Duration) + SheetTime("landing");
                 case FieldEffectKind.Pillar: return FxPillar * FxTimeMul;
-                case FieldEffectKind.Heal: return FxHeal * FxTimeMul;
-                case FieldEffectKind.Buff: return FxBuff * FxTimeMul;
+                case FieldEffectKind.Heal: return SheetTime("heal");
+                case FieldEffectKind.Buff: return SheetTime("buff");
                 case FieldEffectKind.Rain: return Mathf.Max(1, e.Count) * FxRainStep + (FxRainFall + FxBurst) * FxTimeMul;
                 case FieldEffectKind.Bite: return FxBite * FxTimeMul;
                 case FieldEffectKind.Beam: return FxBeam * FxTimeMul;
@@ -172,7 +178,7 @@ namespace TextSlayers
                 Vector2[] spots = e.Points != null && e.Points.Length > 0 && e.Kind != FieldEffectKind.Harvest
                                   && e.Kind != FieldEffectKind.Rain && e.Kind != FieldEffectKind.Links ? ToScreen(e.Points, P) : new[] { c };
 
-                if (e.Theme == FxTheme.Black && (e.Kind == FieldEffectKind.Burst || e.Kind == FieldEffectKind.Pulse
+                if (e.Theme == FxTheme.Black && (e.Kind == FieldEffectKind.Pulse
                     || e.Kind == FieldEffectKind.Zone || e.Kind == FieldEffectKind.Links || e.Kind == FieldEffectKind.Shield))
                 {
                     float da = e.Kind == FieldEffectKind.Zone ? 0.6f : 0.7f * (1f - t);
@@ -183,6 +189,7 @@ namespace TextSlayers
                 {
                     case FieldEffectKind.Spin:      // 원형 베기
                     {
+                        if (IsStium(e)) { DrawStiumSpin(e, follow, unit, age); break; }
                         float ang = AngleOf(e.Dir) + t * 360f;
                         Glow(c, R * 2.2f, main, 1f - t);
                         DrawFx(fxArc, c, R * 2.3f, light, 1f - t, ang);
@@ -191,18 +198,20 @@ namespace TextSlayers
                         DrawFx(fxRing, c, R * 2.2f, main, 0.45f * (1f - t));
                         break;
                     }
-                    case FieldEffectKind.Smash:     // 원형 파괴
-                    case FieldEffectKind.Burst:     // 폭발 · 적중
+                    case FieldEffectKind.Smash:     // 원형 파괴: 지면 강타 시트
                         foreach (var sp in spots)
                         {
-                            float k = Ease(t);
-                            Glow(sp, R * 2f, main, 1f - t);
-                            DrawFx(fxDisc, sp, R * 2f * Mathf.Lerp(0.3f, 1.1f, k), core, 0.9f * (1f - t) * (1f - t));
-                            DrawFx(fxDisc, sp, R * 1.2f * Mathf.Lerp(0.3f, 1f, k), light, 0.85f * (1f - t));
-                            DrawFx(fxRing, sp, R * 2f * Mathf.Lerp(0.4f, 1.4f, k), main, 1f - t);
-                            DrawFx(fxRing, sp, R * 1.6f * Mathf.Lerp(0.4f, 1.2f, k), light, 0.6f * (1f - t));
+                            if (IsStium(e)) DrawStiumImpact(sp, unit, age);
+                            else DrawSheet("slam", Feet(sp, unit), unit, age, Color.white);
                         }
                         break;
+                    case FieldEffectKind.Burst:     // 폭발 · 적중: 테마별 시트 (적중 섬광은 이펙트 색을 입힌다)
+                    {
+                        string key = BurstSheet(e);
+                        Color tint = key == "hit" ? light : Color.white;
+                        foreach (var sp in spots) DrawSheet(key, Feet(sp, unit), unit, age, tint, e.Dir.x < 0f);
+                        break;
+                    }
                     case FieldEffectKind.Pulse:     // 퍼지는 원
                     {
                         float size = R * 2.3f * Ease(t);
@@ -279,7 +288,7 @@ namespace TextSlayers
                         break;
                     }
                     case FieldEffectKind.Swing:     // 기본 공격 (무기별)
-                        DrawSwing(e, c, P(e.End), U, t, main, light);
+                        DrawSwing(e, c, P(e.End), unit, U, t, age, main, light);
                         break;
                     case FieldEffectKind.Multi:     // 연타: 여러 번의 짧은 베기
                     {
@@ -321,7 +330,7 @@ namespace TextSlayers
                             prev = q;
                         }
                         if (e.Kind == FieldEffectKind.Leap && age > travel)
-                            DrawFx(fxRing, z, U * 2.6f * Ease(1f - fade), main, fade);
+                            DrawSheet("landing", Feet(z, unit), unit, age - travel, Color.white);
                         break;
                     }
                     case FieldEffectKind.Pillar:    // 위에서 떨어지는 빛 기둥 (번개 · 불기둥 · 빛)
@@ -337,31 +346,19 @@ namespace TextSlayers
                             DrawFx(fxRing, sp, R * 2.4f * Ease(t), main, a);
                         }
                         break;
-                    case FieldEffectKind.Heal:      // 회복: 떠오르는 작은 빛
-                        DrawFx(fxDisc, follow, U * 2f, main, 0.4f * (1f - t));
-                        for (int k = 0; k < 8; k++)
-                        {
-                            float s = Mathf.Repeat(t + k / 8f, 1f);
-                            Vector2 pos = follow + new Vector2((Hash(e.Start, k) - 0.5f) * U * 1.2f, -s * U * 1.6f);
-                            DrawFx(fxDisc, pos, U * 0.36f, light, (1f - s) * (1f - t));
-                        }
+                    case FieldEffectKind.Heal:      // 회복
+                        DrawSheet("heal", Feet(follow, unit), unit, age, Color.white);
                         break;
-                    case FieldEffectKind.Shield:    // 보호막 · 자세: 대상 둘레의 고리 (따라다님)
+                    case FieldEffectKind.Shield:    // 보호막 · 자세: 대상을 따라다니는 구체
                     {
-                        float a = Mathf.Min(1f, age / 0.15f) * Mathf.Min(1f, (len - age) / 0.25f);
-                        float pulse = 1f + 0.06f * Mathf.Sin(age * 10f);
-                        DrawFx(fxDisc, follow, U * 1.8f * pulse, main, 0.22f * a);
-                        DrawFx(fxRing, follow, U * 1.8f * pulse, light, 0.95f * a);
-                        DrawFx(fxRing, follow, U * 2.0f * pulse, main, 0.5f * a);
+                        float a = Mathf.Min(1f, age / 0.15f) * Mathf.Clamp01((len - age) / 0.25f);
+                        Color tint = light; tint.a = a;
+                        DrawSheet("shield", Feet(follow, unit), unit, age, tint, false, true);
                         break;
                     }
-                    case FieldEffectKind.Buff:      // 강화: 솟아오르며 커지는 고리
-                    {
-                        Vector2 pos = follow + new Vector2(0f, -t * U * 0.6f);
-                        DrawFx(fxRing, pos, U * Mathf.Lerp(0.8f, 2.4f, Ease(t)), main, 1f - t);
-                        DrawFx(fxRing, follow, U * Mathf.Lerp(0.6f, 1.5f, t), light, 0.7f * (1f - t));
+                    case FieldEffectKind.Buff:      // 강화: 빛줄기
+                        DrawSheet("buff", Feet(follow, unit), unit, age, light);
                         break;
-                    }
                     case FieldEffectKind.Rain:      // 폭격: 위에서 떨어진 뒤 터짐
                     {
                         if (e.Points == null) break;
@@ -574,6 +571,8 @@ namespace TextSlayers
                 }
             }
 
+            DrawWaveRemnants(b, unit, P);
+
             // 투사체 (모양: 아치 · 구체 · 탄환 · 화살 · 부적 · 얼음 조각 · 포션)
             foreach (var p in b.Projectiles)
             {
@@ -582,6 +581,11 @@ namespace TextSlayers
                 float ang = AngleOf(p.Dir);
                 Vector2 pos = P(p.Pos);
                 if (p.Skill.Id == "fr_chain" && p.Source.Alive) DrawChain(P(p.Source.Pos), pos, U, main, light, 1f);
+                if (p.Skill.Id == "stium_darkwave")      // 어둠의 검기: 반복 재생하는 초승달
+                {
+                    DrawSheet("darkWave", pos, unit, b.Time, Color.white, false, true, ang);
+                    continue;
+                }
                 if (p.Source != null && p.Source.Theme == FxTheme.Black) DrawFx(fxDisc, pos, U * 1.7f, new Color(0.02f, 0f, 0.06f), 0.85f);
                 switch (p.Skill.Shot)
                 {
@@ -652,12 +656,12 @@ namespace TextSlayers
         }
 
         /// <summary>기본 공격 휘두르기. Count = BasicKind.</summary>
-        static void DrawSwing(FieldEffect e, Vector2 c, Vector2 target, float U, float t, Color main, Color light)
+        static void DrawSwing(FieldEffect e, Vector2 c, Vector2 target, float unit, float U, float t, float age, Color main, Color light)
         {
             var kind = (BasicKind)e.Count;
             float baseAng = AngleOf(e.Dir);
             float a = 1f - t;
-            if (HasWeaponSwing(e)) { DrawWeaponSwing(e, c, U, t, main, light); return; }
+            if (HasWeaponSwing(e)) { DrawWeaponSwing(e, c, unit, U, age, main, light); return; }
             switch (kind)
             {
                 case BasicKind.Fist:       // 주먹: 대상에 짧은 충격
@@ -738,7 +742,7 @@ namespace TextSlayers
         {
             switch (w)
             {
-                case Weapon.GreatSword: return 0.38f;
+                case Weapon.GreatSword: return 0.51f;
                 case Weapon.Halberd: return 0.42f;
                 case Weapon.Katana: return 0.27f;
                 case Weapon.Cross: return 0.36f;
@@ -749,9 +753,16 @@ namespace TextSlayers
         static Vector2 Polar(float deg) => new Vector2(Mathf.Cos(deg * Mathf.Deg2Rad), Mathf.Sin(deg * Mathf.Deg2Rad));
 
         /// <summary>뒤로 젖혔다가 베고, 날이 지나간 자리에 잔상. 무기 모양은 종류별로 그린다.</summary>
-        static void DrawWeaponSwing(FieldEffect e, Vector2 c, float U, float t, Color main, Color light)
+        static void DrawWeaponSwing(FieldEffect e, Vector2 c, float unit, float U, float age, Color main, Color light)
         {
             var w = WeaponOf(e);
+            float duration = WeaponSwingTime(w);
+            float t = Mathf.Min(1f, age / duration);
+            if (w == Weapon.GreatSword)     // 위에서 아래로 내려베기 + 잔흔 (사용자 2026-11-27)
+            {
+                DrawCleave(e, c, unit, U * WeaponScale, age, duration);
+                return;
+            }
             float baseAng = AngleOf(e.Dir);
             float side = Hash(e.Start, 3) < 0.5f ? 1f : -1f;          // 휘두르는 방향을 번갈아
             Vector2 pivot = c - e.Dir * (U * 0.45f);                  // 몸 중심 근처
@@ -761,7 +772,6 @@ namespace TextSlayers
             Color trail = main;
             switch (w)
             {
-                case Weapon.GreatSword: from = -115f; windup = 0.22f; reach = 2.3f; trail = SkillColor.Dark; break;
                 case Weapon.Halberd: from = -130f; to = 90f; windup = 0.25f; reach = 3.1f; break;
                 case Weapon.Katana: from = -100f; to = 95f; windup = 0.14f; cut = 0.3f; reach = 2.3f; break;
                 case Weapon.Cross: from = -120f; to = 70f; reach = 2.0f; break;
@@ -790,9 +800,6 @@ namespace TextSlayers
 
             switch (w)
             {
-                case Weapon.GreatSword:     // 강격검과 같은 직사각형 대검 (사용자 2026-11-27)
-                    DrawBlade(hand, ang, U * 2.4f, U * 0.55f, SkillColor.Dark, a);
-                    break;
                 case Weapon.OneHand:
                 {
                     float length = U * 1.55f, width = U * 0.22f;

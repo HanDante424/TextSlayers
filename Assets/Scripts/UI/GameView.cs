@@ -293,8 +293,10 @@ namespace TextSlayers
         static readonly Color PlayerColor = new Color(0.30f, 0.55f, 0.95f);
         static readonly Color EnemyColor = new Color(0.85f, 0.35f, 0.30f);
         static readonly Color ImmortalColor = new Color(0.95f, 0.80f, 0.30f);
+        // 필드 체력바 (사용자 2026-11-27): 아군 초록 · 적 빨강
+        static readonly Color AllyHpColor = new Color(0.25f, 0.72f, 0.32f);
+        static readonly Color EnemyHpColor = new Color(0.85f, 0.25f, 0.25f);
         static readonly Color GuardColor = new Color(0.6f, 0.85f, 1f);
-        static readonly Color StunColor = new Color(1f, 0.9f, 0.3f);
         static readonly Color MarkColor = new Color(1f, 0.3f, 0.3f);
 
         static Vector2 partyScroll;
@@ -639,9 +641,15 @@ namespace TextSlayers
                 cy -= u.AirHeight * unit * k;
             }
             var body = new Rect(cx - d / 2, cy - d / 2, d, d);
-            if (u.C.Guarding) Fill(new Rect(body.x - 3, body.y - 3, body.width + 6, body.height + 6), GuardColor);
-            if (u.SuperArmor)   // 슈퍼아머: 금색 테두리
-                Fill(new Rect(body.x - 3, body.y - 3, body.width + 6, body.height + 6), ArmorColor);
+            var sprite = GetFieldSprite(u.Def?.Id);
+            var spriteRect = FieldSpriteRect(body);
+            bool faceLeft = u.Facing.x < 0f;
+            if (sprite == null)
+            {
+                var border = new Rect(body.x - 3, body.y - 3, body.width + 6, body.height + 6);
+                if (u.C.Guarding) Fill(border, GuardColor);
+                if (u.SuperArmor) Fill(border, ArmorColor);
+            }
 
             // 무기 상시 표시 (벤데타: 등 뒤 케이스 + 손의 권총)
             if (u.Def != null && u.Def.ShowWeapons)
@@ -661,29 +669,46 @@ namespace TextSlayers
             {
                 Vector2 vel = u.PushVel * (u.PushTimer / FieldConst.PushTime) * unit;
                 for (int k = 3; k >= 1; k--)
-                    Fill(new Rect(body.x - vel.x * GhostStep * k, body.y - vel.y * GhostStep * k, d, d),
-                         new Color(bodyColor.r, bodyColor.g, bodyColor.b, 0.4f / k));
+                {
+                    Vector2 offset = vel * (GhostStep * k);
+                    var ghost = sprite == null ? body : spriteRect;
+                    ghost.position -= offset;
+                    if (sprite == null) Fill(ghost, new Color(bodyColor.r, bodyColor.g, bodyColor.b, 0.4f / k));
+                    else PaintFieldSprite(ghost, sprite.Art, faceLeft, new Color(1f, 1f, 1f, 0.4f / k));
+                }
             }
             if (u.Glutton) bodyColor = GluttonBody;          // 글러트니: 회색
             if (u.MoonShadow) bodyColor = ShadowBody;        // 월영: 검은색으로 뒤덮임
             if (u.FireArm) bodyColor = Color.Lerp(bodyColor, SkillColor.Fire, 0.45f);
-            Fill(body, bodyColor);
-            if (flash > 0f) Fill(body, new Color(1f, 1f, 1f, 0.7f * flash));
-            GUI.Label(body, ShortName(u), small);
+            var nameRect = body;
+            if (sprite == null)
+            {
+                Fill(body, bodyColor);
+                if (flash > 0f) Fill(body, new Color(1f, 1f, 1f, 0.7f * flash));
+            }
+            else
+            {
+                DrawFieldSprite(sprite, spriteRect, faceLeft, u, flash);
+                nameRect.height = small.lineHeight;
+                nameRect.y = FieldSpriteHead(spriteRect) - nameRect.height;
+            }
             if (u.Immortal)   // 테스트 더미: 전술 한 글자 (돌 · 침 · 견 · 후)
                 GUI.Label(new Rect(cx - 20, body.y - 15, 40, 14), $"<size=11><color=#ffd76a>{StrategyMark(u.Strategy)}</color></size>", small);
             if (u.MoonShadow) DrawEvilEye(new Vector2(cx, cy), d * 0.45f, now, 0.9f);   // 캐릭터를 덮는 눈
 
             // 상태 표시: 기절(노란 고리) · 표식(빨간 마름모)
             if (u.StunTimer > 0f || u.Marked) EnsureFx();
+            float headY = sprite == null ? body.y : Mathf.Max(FieldSpriteHead(spriteRect), field.y + unit * 0.25f);
             if (u.StunTimer > 0f)
-                DrawFx(fxRing, new Vector2(cx, body.y - unit * 0.25f), unit * 0.6f, StunColor, 0.9f);
+                DrawSheet("stun", new Vector2(cx, headY - unit * 0.25f), unit, now, Color.white, false, true);
             if (u.Marked)
-                DrawFxRect(Texture2D.whiteTexture, new Vector2(cx + d * 0.45f, body.y - unit * 0.2f), unit * 0.28f, unit * 0.28f, MarkColor, 1f, 45f);
+                DrawFxRect(Texture2D.whiteTexture, new Vector2(cx + d * 0.45f, headY - unit * 0.2f), unit * 0.28f, unit * 0.28f, MarkColor, 1f, 45f);
 
             var bar = new Rect(body.x, body.yMax + 2, d, 5);
             Fill(bar, BarBack);
-            Fill(new Rect(bar.x, bar.y, bar.width * (u.Immortal ? 1f : u.HpRatio), bar.height), u.Immortal ? ImmortalColor : HpColor);
+            Fill(new Rect(bar.x, bar.y, bar.width * (u.Immortal ? 1f : u.HpRatio), bar.height), u.IsPlayer ? AllyHpColor : EnemyHpColor);
+            if (sprite != null && nameRect.y < field.y) nameRect.y = bar.yMax;
+            GUI.Label(nameRect, ShortName(u), small);
 
             // 총잡이: 장전 막대 (장전 중) · 남은 기본탄
             if (u.Def != null && u.Def.Gunner)
@@ -744,7 +769,7 @@ namespace TextSlayers
                 GUI.Label(new Rect(x, y, w, 26),
                     $"{u.Name}{dead} <size=15><color=#aaaaaa>{FieldData.RoleName(u.Role)} · {FieldData.StrategyName(u.Strategy)}</color></size>", label);
                 y += 26;
-                DrawBar(new Rect(x, y, w * 0.45f, 20), u.HpRatio, HpColor, $"{u.C.Hp}/{u.C.Stats.HP}");
+                DrawBar(new Rect(x, y, w * 0.45f, 20), u.HpRatio, AllyHpColor, $"{u.C.Hp}/{u.C.Stats.HP}");
                 GUI.Label(new Rect(x + w * 0.45f + 8, y - 4, w * 0.55f - 8, 26),
                     $"<size=16>피해 {u.DamageDealt} · 초당 {u.DamageDealt / t:0.0}</size>", label);
                 y += 30;

@@ -30,10 +30,14 @@ namespace TextSlayers
         const float GhostLinger = 0.35f;     // 잔상이 남는 시간
         const int GhostCount = 8;
 
+        const float FistSwingTime = 0.65f;   // 주먹 원호 · 균열 연출 시간 (착탄 시트는 더 길게 남는다)
+
         static float SpecialLength(FieldEffect e)
         {
             switch (e.Kind)
             {
+                case FieldEffectKind.BladeSlam when IsStium(e) && e.Target != null:
+                    return Mathf.Max(e.Duration, SmashSlamStart(e) + SheetTime("stiumSmash"));
                 case FieldEffectKind.BigSlash: return FxBigSlash;
                 case FieldEffectKind.Coin: return FxCoin;
                 case FieldEffectKind.SlantPillar: return FxSlantPillar;
@@ -44,14 +48,14 @@ namespace TextSlayers
                 case FieldEffectKind.FireLine: return 0.7f;
                 case FieldEffectKind.Afterimage: return Mathf.Max(0.1f, e.Duration) + GhostLinger;
                 case FieldEffectKind.Thrust: return 0.4f;
-                case FieldEffectKind.FistSlam: return 0.65f;
+                case FieldEffectKind.FistSlam: return FistSwingTime + SheetTime("slam");
                 case FieldEffectKind.SwordCut: return 0.4f;
                 case FieldEffectKind.WhiteSlash: return 0.65f;
-                case FieldEffectKind.IceShatter: return 0.55f;
+                case FieldEffectKind.IceShatter: return SheetTime("iceShatter");
                 case FieldEffectKind.BladeSwing: return FxBladeSwing;
-                case FieldEffectKind.Missiles: return FxCasePlant + Mathf.Max(1, e.Count) * FxMissileGap + FxMissileRise + FxMissileFall + FxMissileBoom;
+                case FieldEffectKind.Missiles: return FxCasePlant + Mathf.Max(1, e.Count) * FxMissileGap + FxMissileRise + FxMissileFall + Mathf.Max(FxMissileBoom, SheetTime("boom"));
                 case FieldEffectKind.CrossFall: return e.Duration + FxCrossFallAfter;
-                case FieldEffectKind.Landing: return e.Duration + 0.4f;
+                case FieldEffectKind.Landing: return e.Duration + SheetTime("landing");
                 case FieldEffectKind.BladeSlam: return Mathf.Max(0.35f, e.Duration);
                 default: return e.Duration > 0f ? e.Duration : FxDefaultHold;   // BladeRaise · Whirl · Freeze · Grab · Punches · CrossHold · ForwardSlashes
             }
@@ -248,6 +252,7 @@ namespace TextSlayers
             {
                 case FieldEffectKind.BladeSlam:   // 머리 위에서 앞으로 내려찍는 직사각형 대검
                 {
+                    if (IsStium(e) && e.Target != null) { DrawStiumSmashCast(e, follow, unit, age); break; }
                     bool longBeam = e.Radius >= 0.9f && e.Target == null;
                     float length = longBeam ? Mathf.Min(12f * unit, Vector2.Distance(P(e.Origin), P(e.End))) : U * 2.2f;
                     float swing = Mathf.Clamp01(t / 0.6f);
@@ -255,7 +260,8 @@ namespace TextSlayers
                     float from = -90f, to = dirAng;
                     float ang = Mathf.LerpAngle(from, to, eased);
                     float a = t < 0.8f ? 1f : (1f - t) / 0.2f;
-                    DrawBlade(follow, ang, length, longBeam ? U * 0.75f : U * 0.5f, main, a);
+                    if (longBeam) DrawBlade(follow, ang, length, U * 0.75f, main, a);   // 길게 뻗는 날은 도형 유지
+                    else DrawSkillBlade(e, unit, follow, ang, length, U * 0.5f, main, a);
                     if (swing >= 1f)
                     {
                         Vector2 tip = follow + new Vector2(Mathf.Cos(to * Mathf.Deg2Rad), Mathf.Sin(to * Mathf.Deg2Rad)) * (length * 0.85f);
@@ -270,7 +276,9 @@ namespace TextSlayers
                     float grow = Ease(Mathf.Clamp01(t * 2f));
                     float length = U * Mathf.Lerp(1.2f, 3.4f, grow);
                     float shake = Mathf.Sin(age * 60f) * 1.5f * t;
-                    DrawBlade(follow + new Vector2(shake, -U * 0.3f), -90f, length, U * 0.7f, main, 1f);
+                    bool stium = e.Source != null && e.Source.Def != null && e.Source.Def.Id == "stium";
+                    // 도트는 늘어나지 않으므로 처음부터 다 자란 크기로
+                    DrawSkillBlade(e, unit, follow + new Vector2(shake, -U * 0.3f), -90f, stium ? U * 3.4f : length, U * 0.7f, main, 1f);
                     for (int k = 0; k < 5; k++)
                     {
                         float s = Mathf.Repeat(t * 3f + k / 5f, 1f);
@@ -295,7 +303,7 @@ namespace TextSlayers
                     }
                     DrawFx(fxArc, follow, length * 2.3f, light, 0.8f * a, ang - 18f);
                     DrawFx(fxArc, follow, length * 2.0f, main, 0.6f * a, ang - 38f);
-                    DrawBlade(follow, ang, length, U * 0.42f, main, a);
+                    DrawSkillBlade(e, unit, follow, ang, length, U * 0.42f, main, a);
                     break;
                 }
                 case FieldEffectKind.BigSlash:    // 큰 베기 한 번
@@ -339,6 +347,7 @@ namespace TextSlayers
                 {
                     float a = Mathf.Min(1f, age / 0.15f) * Mathf.Min(1f, (1f - t) * 2.5f);
                     DrawFxRect(Texture2D.whiteTexture, field.center, field.width, field.height, new Color(0.55f, 0.85f, 1f), 0.22f * a);
+                    DrawSheet("frostNova", Feet(follow, unit), unit, age, Color.white);
                     for (int k = 0; k < 24; k++)  // 바닥 서리
                     {
                         Vector2 pos = new Vector2(field.x + Hash(e.Start, k) * field.width, field.y + Hash(e.Start, k + 40) * field.height);
@@ -377,7 +386,9 @@ namespace TextSlayers
                     float side = e.Dir.x >= 0f ? 1f : -1f;
                     Vector2 planted = self + new Vector2(side * unit * 1.15f, -unit * 0.15f);
                     float total = SpecialLength(e);
-                    float ca = Mathf.Min(1f, (total - age) / 0.3f);
+                    float caseTotal = total - Mathf.Max(0f, SheetTime("boom") - FxMissileBoom);   // 케이스는 폭발 잔연보다 먼저 사라진다
+                    float ca = Mathf.Clamp01((caseTotal - age) / 0.3f);
+                    float boomLength = SheetTime("boom");
 
                     // 케이스: 등 뒤에서 머리 위로 넘겨 앞에 세로로 내려박는다
                     float k0 = Mathf.Clamp01(age / FxCasePlant);
@@ -438,12 +449,9 @@ namespace TextSlayers
                             DrawFx(fxDisc, pos, unit * 0.45f, light, 1f);
                             DrawFx(fxRing, hit, unit * 0.9f, new Color(1f, 0.3f, 0.2f), 0.5f);
                         }
-                        else if (s < FxMissileRise + FxMissileFall + FxMissileBoom)
+                        else if (s < FxMissileRise + FxMissileFall + boomLength)
                         {
-                            float f = (s - FxMissileRise - FxMissileFall) / FxMissileBoom;
-                            DrawFx(fxDisc, hit, unit * 2.2f * Mathf.Lerp(0.4f, 1f, Ease(f)), main, 0.85f * (1f - f));
-                            DrawFx(fxDisc, hit, unit * 1.0f, Color.white, 0.8f * (1f - f));
-                            DrawFx(fxRing, hit, unit * 2.6f * Ease(f), light, 1f - f);
+                            DrawSheet("boom", Feet(hit, unit), unit, s - FxMissileRise - FxMissileFall, Color.white);
                         }
                     }
                     break;
@@ -657,32 +665,18 @@ namespace TextSlayers
                     DrawFx(fxDisc, c, U * 1.4f, Color.white, 0.7f * (1f - Mathf.Clamp01(t * 2.5f)));
                     break;
                 }
-                case FieldEffectKind.IceShatter:  // 얼음 조각이 대상 뒤쪽 부채꼴로 흩뿌려진다
-                {
-                    Vector2 dir = e.Dir.sqrMagnitude > 0.001f ? e.Dir.normalized : Vector2.right;
-                    float baseAng = AngleOf(dir);
-                    float fly = Ease(t);
-                    float a = 1f - t * t;
-                    for (int k = 0; k < 16; k++)
-                    {
-                        float ang = baseAng + (Hash(e.Start, k) - 0.5f) * 80f;       // 뒤쪽 ±40도
-                        float dist = unit * (0.5f + Hash(e.Start, k + 17) * 2.6f) * fly;
-                        Vector2 d = Polar(ang);
-                        Vector2 pos = c + d * dist + new Vector2(0f, unit * 0.8f * t * t);   // 살짝 가라앉음
-                        float size = unit * (0.16f + Hash(e.Start, k + 41) * 0.28f) * (1f - t * 0.5f);
-                        DrawFxRect(fxLine, pos - d * (size * 1.2f), size * 3f, size * 0.45f, main, 0.55f * a, ang);   // 꼬리
-                        DrawFxRect(Diamond, pos, size * 2.1f, size, k % 3 == 0 ? Color.white : light, a, ang + t * 200f * (k % 2 == 0 ? 1f : -1f));
-                    }
-                    DrawFx(fxDisc, c, U * 1.5f, light, 0.8f * (1f - Mathf.Clamp01(t * 3f)));
-                    DrawFx(fxRing, c, U * Mathf.Lerp(0.5f, 1.8f, fly), main, 0.8f * (1f - t));
+                case FieldEffectKind.IceShatter:  // 얼음 조각이 대상 뒤(탄 진행 방향)로 흩뿌려진다
+                    DrawSheet("iceShatter", Feet(c, unit), unit, age, Color.white, e.Dir.x < 0f);
                     break;
-                }
                 case FieldEffectKind.FistSlam:    // 큰 주먹이 원형 궤적을 그리며 위에서 아래로 내려찍는다
                 {
                     float side = e.Dir.x >= 0f ? 1f : -1f;
                     float radius = U * 2.1f;
                     Vector2 center = c + new Vector2(-side * radius, 0f);   // 원의 중심: 찍는 지점의 옆
                     const float Swing = 0.34f;                              // 전체 중 휘두르는 비율
+                    DrawSheet("slam", Feet(c, unit), unit, age - FistSwingTime * Swing, Color.white);
+                    if (age >= FistSwingTime) break;                        // 이후는 착탄 시트만 남는다
+                    t = age / FistSwingTime;
                     float k = Mathf.Clamp01(t / Swing);
                     float ang = Mathf.Lerp(-130f, 0f, k * k);              // 0 = 찍는 지점
                     Vector2 At(float deg) => center + new Vector2(Mathf.Cos(deg * Mathf.Deg2Rad) * side, Mathf.Sin(deg * Mathf.Deg2Rad)) * radius;
@@ -767,12 +761,7 @@ namespace TextSlayers
                             DrawFx(fxDisc, pos, U * 1.3f, light, 1f);
                         }
                     }
-                    else
-                    {
-                        float f = (age - e.Duration) / 0.4f;
-                        DrawFx(fxRing, c, R * 3.2f * Ease(f), light, 1f - f);
-                        DrawFx(fxDisc, c, R * 2.2f, main, 0.75f * (1f - f));
-                    }
+                    else DrawSheet("landing", Feet(c, unit), unit, age - e.Duration, Color.white);
                     break;
                 }
             }
