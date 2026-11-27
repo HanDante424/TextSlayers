@@ -125,10 +125,7 @@ namespace TextSlayers
                 case FieldEffectKind.Swing:
                 {
                     if (!HasWeaponSwing(e)) return FxSwing * FxTimeMul;
-                    var weapon = WeaponOf(e);
-                    // 내려베기를 쓰는 무기는 잔흔이 남는 동안
-                    var cleave = CleaveOf(e);
-                    return cleave != null ? SheetTime(cleave.Sheet) : WeaponSwingTime(weapon);
+                    return SheetTime(CleaveOf(e).Sheet);      // 내려베기: 잔흔이 남는 동안
                 }
                 case FieldEffectKind.Multi: return MultiStep(e) * Mathf.Max(1, e.Count) + FxMultiOne * FxTimeMul;
                 case FieldEffectKind.Trail: return Mathf.Max(0.1f, e.Duration) + FxAfter * FxTimeMul;
@@ -700,7 +697,7 @@ namespace TextSlayers
             var kind = (BasicKind)e.Count;
             float baseAng = AngleOf(e.Dir);
             float a = 1f - t;
-            if (HasWeaponSwing(e)) { DrawWeaponSwing(e, c, unit, U, age, main, light); return; }
+            if (HasWeaponSwing(e)) { DrawWeaponSwing(e, c, unit, U, age, main); return; }
             switch (kind)
             {
                 case BasicKind.Fist:       // 주먹: 대상에 짧은 충격
@@ -755,7 +752,6 @@ namespace TextSlayers
 
         const float WeaponScale = 0.65f;   // 무기 크기 배율 (사용자 2026-11-27: 너무 크다 → 1.0 에서 줄임) [임시]
         static readonly Color SteelBlade = new Color(0.82f, 0.84f, 0.92f);
-        static readonly Color WoodShaft = new Color(0.45f, 0.32f, 0.2f);
 
         /// <summary>캐릭터별 기본 공격 무기. 없으면 기존 호 이펙트.</summary>
         static Weapon WeaponOf(FieldEffect e)
@@ -777,94 +773,11 @@ namespace TextSlayers
 
         static bool HasWeaponSwing(FieldEffect e) => WeaponOf(e) != Weapon.None;
 
-        static float WeaponSwingTime(Weapon w)
-        {
-            switch (w)
-            {
-                case Weapon.GreatSword: return 0.51f;
-                case Weapon.Halberd: return 0.42f;
-                default: return 0.3f;
-            }
-        }
-
         static Vector2 Polar(float deg) => new Vector2(Mathf.Cos(deg * Mathf.Deg2Rad), Mathf.Sin(deg * Mathf.Deg2Rad));
 
-        /// <summary>뒤로 젖혔다가 베고, 날이 지나간 자리에 잔상. 무기 모양은 종류별로 그린다.</summary>
-        const float OneHandReach = 1.86f;   // 손 → 칼끝 (U 단위)
-
-        static void DrawOneHandSword(Vector2 hand, float ang, float U, Color trail, float a)
-        {
-            Vector2 dir = Polar(ang);
-            float length = U * 1.55f, width = U * 0.22f;
-            DrawFxRect(Texture2D.whiteTexture, hand + dir * (U * 0.08f), U * 0.34f, U * 0.11f, WoodShaft, a, ang);
-            DrawFxRect(Texture2D.whiteTexture, hand + dir * (U * 0.27f), U * 0.1f, U * 0.52f, new Color(0.75f, 0.62f, 0.3f), a, ang);        // 코등이
-            Vector2 start = hand + dir * (U * 0.32f);
-            Vector2 mid = start + dir * (length * 0.42f);
-            DrawFxRect(fxLine, mid, length * 1.2f, width * 3.2f, trail, 0.7f * a, ang);                                          // 속성 기운
-            DrawFxRect(Texture2D.whiteTexture, mid, length * 0.84f, width, SteelBlade, a, ang);
-            DrawFxRect(Texture2D.whiteTexture, mid, length * 0.84f, width * 0.25f, Color.white, a, ang);
-            DrawFxRect(Diamond, start + dir * (length * 0.84f), length * 0.3f, width, SteelBlade, a, ang);
-        }
-
-        static void DrawWeaponSwing(FieldEffect e, Vector2 c, float unit, float U, float age, Color main, Color light)
-        {
-            var w = WeaponOf(e);
-            float duration = WeaponSwingTime(w);
-            float t = Mathf.Min(1f, age / duration);
-            var cleave = CleaveOf(e);       // 위에서 아래로 내려베기 + 잔흔 (사용자 2026-11-27)
-            if (cleave != null)
-            {
-                DrawCleave(cleave, e.Dir, c, unit, U * WeaponScale, age, main);
-                return;
-            }
-            float baseAng = AngleOf(e.Dir);
-            float side = Hash(e.Start, 3) < 0.5f ? 1f : -1f;          // 휘두르는 방향을 번갈아
-            Vector2 pivot = c - e.Dir * (U * 0.45f);                  // 몸 중심 근처
-            U *= WeaponScale;                                          // 무기 · 궤적 크기
-
-            float from = -110f, to = 80f, windup = 0.2f, cut = 0.45f, reach = 2.0f;
-            Color trail = main;
-            switch (w)
-            {
-                default: from = -95f; to = 75f; windup = 0.16f; cut = 0.4f; reach = 1.8f; break;
-            }
-
-            float swing = t < windup ? 0f : Ease(Mathf.Clamp01((t - windup) / cut));
-            float offset = t < windup ? Mathf.Lerp(from + 20f, from, t / windup) : Mathf.Lerp(from, to, swing);
-            float ang = baseAng + offset * side;
-            float a = t < 0.75f ? 1f : (1f - t) / 0.25f;
-
-            // 지나간 궤적
-            if (swing > 0.05f)
-                for (int k = 1; k <= 4; k++)
-                {
-                    float back = k * 24f;
-                    if (offset - from < back) break;
-                    float ga = baseAng + (offset - back) * side;
-                    DrawFx(fxArc, pivot, U * reach * 2f, trail, 0.65f * a * (1f - k * 0.2f), ga);
-                    DrawFx(fxArc, pivot, U * reach * 1.7f, light, 0.35f * a * (1f - k * 0.22f), ga);
-                }
-
-            Vector2 dir = Polar(ang);
-            Vector2 perp = new Vector2(-dir.y, dir.x);
-            Vector2 hand = pivot + dir * (U * 0.35f);
-
-            switch (w)
-            {
-                case Weapon.OneHand:
-                    DrawOneHandSword(hand, ang, U, trail, a);
-                    break;
-            }
-
-            // 베는 순간의 충격
-            if (t > windup + cut * 0.7f)
-            {
-                float k = Mathf.Clamp01((t - windup - cut * 0.7f) / (1f - windup - cut * 0.7f));
-                Vector2 hit = c + e.Dir * (U * 0.9f);
-                DrawFx(fxRing, hit, U * Mathf.Lerp(0.6f, w == Weapon.OneHand ? 1.7f : 2.2f, Ease(k)), light, 1f - k);
-                DrawFx(fxDisc, hit, U * 1.1f, trail, 0.6f * (1f - k));
-            }
-        }
+        /// <summary>무기를 든 기본 공격: 위에서 아래로 내려베기 + 잔흔 (사용자 2026-11-27).</summary>
+        static void DrawWeaponSwing(FieldEffect e, Vector2 c, float unit, float U, float age, Color main)
+            => DrawCleave(CleaveOf(e), e.Dir, c, unit, U * WeaponScale, age, main);
 
         static Vector2[] ToScreen(Vector2[] pts, System.Func<Vector2, Vector2> toScreen)
         {

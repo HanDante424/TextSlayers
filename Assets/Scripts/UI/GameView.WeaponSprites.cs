@@ -111,6 +111,12 @@ namespace TextSlayers
 
         static bool IsLeon(FieldEffect e) => e.Source != null && e.Source.Def != null && e.Source.Def.Id == "c38";
 
+        // 사하라 환도 (Docs/Design/Hwando_64.png 그대로). 원본이 오른쪽을 향한 외날 (날이 아래).
+        const string SaharaSword = "sahara_sword";
+        const float SaharaSwordGripY = 30.5f;
+
+        static bool IsSahara(FieldEffect e) => e.Source != null && e.Source.Def != null && e.Source.Def.Id == "c41";
+
         /// <summary>스킬의 대검 도트 배율: 원하는 길이에 가장 가까운 정수배.</summary>
         static float SkillSwordPixel(float unit, float length)
         {
@@ -127,19 +133,20 @@ namespace TextSlayers
         }
 
         /// <summary>
-        /// 스킬의 대검: 스티움 · 레온하르트는 도트(길이에 가장 가까운 정수배), 다른 캐릭터는 기존 도형 날.
+        /// 스킬의 검: 스티움 · 레온하르트 · 사하라는 도트(길이에 가장 가까운 정수배), 다른 캐릭터는 기존 도형 날.
         /// </summary>
         static void DrawSkillBlade(FieldEffect e, float unit, Vector2 pivot, float angleDeg, float length, float width, Color main, float alpha)
         {
-            bool leon = IsLeon(e);
+            bool leon = IsLeon(e), sahara = IsSahara(e);
             var texture = leon ? WeaponTexture(LionSword)
+                        : sahara ? WeaponTexture(SaharaSword)
                         : e.Source != null && e.Source.Def != null && e.Source.Def.Id == "stium" ? SwordTexture() : null;
             if (texture == null)
             {
                 DrawBlade(pivot, angleDeg, length, width, main, alpha);
                 return;
             }
-            DrawSwordSprite(texture, pivot, angleDeg, SkillSwordPixel(unit, length), alpha, leon ? LionSwordGripY : SwordGripY);
+            DrawSwordSprite(texture, pivot, angleDeg, SkillSwordPixel(unit, length), alpha, leon ? LionSwordGripY : sahara ? SaharaSwordGripY : SwordGripY);
         }
     }
 }
