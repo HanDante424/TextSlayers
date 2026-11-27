@@ -46,6 +46,13 @@ namespace TextSlayers
         ForwardSlashes, // 전방 연속 베기
         FanWave,    // 부채꼴 충격파
         FireLine,   // 맵을 꿰뚫는 직선 화염
+        Afterimage, // 빠른 이동의 잔상
+        Thrust,     // 찌르기
+        FistSlam,   // 주먹이 원형 궤적으로 내려찍는다
+        SwordRaise, // 일반 대검을 머리 위로 준비
+        SwordCut,   // 일반 대검 내려베기
+        WhiteSlash, // 벤 자리(실제 판정 길이)에 잠깐 남는 흰 궤적
+        IceShatter, // 얼음이 진행 방향(대상 뒤)으로 흩뿌려진다
         LeapOff,    // 맵 위로 솟구침
         Landing,    // 낙하 착지 (그림자 → 충격)
     }
@@ -158,6 +165,7 @@ namespace TextSlayers
         public float CastTimer;               // 발동 후 '사용 중' (다른 행동 안 함)
         public float CreepTimer;
         public float ArmorTimer;
+        public FieldEffect CounterStance;     // 방어자세 이펙트 (반격하면 바로 지운다)
         public float ToughUp, ToughUpTimer, ToughDown, ToughDownTimer;
         public bool SuperArmor => ArmorTimer > 0f || MoonShadow || Glutton;   // 월영 · 글러트니: 상시 슈퍼아머
         public float Toughness => Mathf.Clamp((ToughUpTimer > 0f ? ToughUp : 0f) - (ToughDownTimer > 0f ? ToughDown : 0f), 0f, 100f);
@@ -169,6 +177,11 @@ namespace TextSlayers
         public Vector2 LandPos;
         public float HeldTimer;                         // 잡힘 (행동 불가, 원으로 감쌈)
         public FieldUnit Grabbed;                       // 내가 잡은 대상
+        public FieldSkillDef GrabSkill;
+        public int SlamsLeft;                           // 남은 내려찍기
+        public float SlamTimer;                         // 지금 구간의 남은 시간
+        public bool Slamming;                           // 포물선 이동 중 (false = 제압 중)
+        public Vector2 SlamFrom, SlamTo;
         public FieldSkillDef Barrage;
         public int BarrageLeft;
         public float BarrageInterval, BarrageNext;
@@ -193,6 +206,7 @@ namespace TextSlayers
         public float HuntTimer;               // 몰이 사냥: 표식 대상 우선
         public float Ignite;                  // 점화 (화염의 팔)
         public bool FireArm;
+        public float CaseDownUntil;           // 케이스를 내려놓은 동안 (등의 케이스를 그리지 않는다)
         public float FireArmBurn;             // 화염의 팔 자해 누적 시간 (1초마다)
         public bool Glutton;                  // 멜 글러트니 변신
         public bool MoonShadowPassive;        // 요월 월영 장착
@@ -471,7 +485,7 @@ namespace TextSlayers
             Phase = FieldPhase.Running;
             Altar = 0f;
             EyeOpen = false;
-            foreach (var u in Players) { if (u.MoonShadow) EndMoonShadow(u); u.Marked = false; u.FollowUps.Clear(); u.ChannelTimer = 0f; CancelCast(u); u.SpecialAmmo = 0; u.ArrivalHit = null; u.Dashing = false; u.OffMapTimer = 0f; u.HeldTimer = 0f; u.Grabbed = null; u.Barrage = null; u.AirTimer = 0f; }
+            foreach (var u in Players) { if (u.MoonShadow) EndMoonShadow(u); u.Marked = false; u.FollowUps.Clear(); u.ChannelTimer = 0f; CancelCast(u); u.SpecialAmmo = 0; u.ArrivalHit = null; u.Dashing = false; u.OffMapTimer = 0f; u.HeldTimer = 0f; u.Grabbed = null; u.GrabSkill = null; u.Barrage = null; u.AirTimer = 0f; }
             Emit(FieldEventKind.Wave, null, null, index + 1, false, $"[{index + 1}/{WaveCount}] 적이 나타났다!");
         }
 
@@ -650,6 +664,7 @@ namespace TextSlayers
                 }
             }
             if (u.Barrage != null) BarrageStep(u, dt);
+            if (u.Grabbed != null) GrabStep(u, dt);
 
             // 화염의 팔 자해: 매초 최대 체력 5%, 체력 1 까지만 (확정 수치라 '수치 미정 피해 0' 과 무관하게 적용)
             if (u.FireArm)
@@ -1053,10 +1068,10 @@ namespace TextSlayers
             float minDist = FieldConst.Radius * 2f;
             for (int i = 0; i < all.Count; i++)
             {
-                if (!all[i].Targetable) continue;
+                if (!all[i].Targetable || all[i].HeldTimer > 0f) continue;   // 잡힌 유닛은 밀지 않는다
                 for (int j = i + 1; j < all.Count; j++)
                 {
-                    if (!all[j].Targetable) continue;
+                    if (!all[j].Targetable || all[j].HeldTimer > 0f) continue;
                     Vector2 d = all[j].Pos - all[i].Pos;
                     float dist = d.magnitude;
                     if (dist >= minDist) continue;
@@ -1351,6 +1366,81 @@ namespace TextSlayers
             if (s.HideWhileUsing) u.OffMapTimer = Mathf.Max(u.OffMapTimer, active);   // 사용 중 맵 이탈
         }
 
+        const float GrabSubdueTime = 0.25f;     // 제압
+        const float GrabSlamTime = 2f;          // 내려찍기 전체 시간 (사용자 2026-11-27)
+        const float GrabArcHeight = 2.6f;       // 포물선 높이 [임시]
+        const float GrabRadiusMin = 1.8f, GrabRadiusMax = 3.2f;
+
+        /// <summary>잡은 대상을 자신 주변 여러 곳으로 포물선을 그리며 내려찍는다. 시전자가 기절 · 사망하면 놓친다.</summary>
+        void GrabStep(FieldUnit u, float dt)
+        {
+            var s = u.GrabSkill;
+            var held = u.Grabbed;
+            if (s == null || !u.Alive || u.StunTimer > 0f || !held.Alive)
+            {
+                held.HeldTimer = 0f; held.AirTimer = 0f;
+                u.Grabbed = null; u.ChannelTimer = 0f; u.RootTimer = 0f;
+                return;
+            }
+
+            int total = Mathf.Max(1, s.Hits);
+            float segment = GrabSlamTime / total;
+            u.SlamTimer -= dt;
+            if (u.Slamming)
+            {
+                held.Pos = Vector2.Lerp(u.SlamFrom, u.SlamTo, Mathf.Clamp01(1f - u.SlamTimer / segment));
+                ClampToField(held);
+                Vector2 face = held.Pos - u.Pos;
+                if (face.sqrMagnitude > 0.01f) u.Facing = face.normalized;
+            }
+            if (u.SlamTimer > 0.0001f) return;
+
+            if (u.Slamming)
+            {
+                // 착지: 대상과 주변에 피해, 주변은 기절 · 넉백
+                held.Pos = u.SlamTo;
+                held.AirTimer = 0f;
+                SkillHit(u, held, s);
+                foreach (var f in FoesAround(u, held.Pos, s.Radius))
+                {
+                    if (f == held) continue;
+                    SkillHit(u, f, s);
+                    f.StunTimer = Mathf.Max(f.StunTimer, s.Stun * (1f - f.Toughness / 100f));
+                    Knockback(f, f.Pos - held.Pos, 2);
+                }
+                Fx(FieldEffectKind.Smash, u, held.Pos, held.Pos, s.Radius, s.FxColor);
+                Fx(FieldEffectKind.Pulse, u, held.Pos, held.Pos, s.Radius * 1.3f, s.FxColor);
+                u.SlamsLeft--;
+            }
+
+            if (u.SlamsLeft <= 0)
+            {
+                // 뱉어낸다
+                held.HeldTimer = 0f;
+                u.Grabbed = null;
+                held.StunTimer = Mathf.Max(held.StunTimer, s.Stun * (1f - held.Toughness / 100f));
+                Knockback(held, held.Pos - u.Pos, 2);
+                return;
+            }
+
+            // 다음 내려찍을 자리: 글러트니 주변을 돌아가며 (직전 자리에서 먼 쪽)
+            Vector2 prev = held.Pos - u.Pos;
+            float baseAng = prev.sqrMagnitude > 0.01f ? Mathf.Atan2(prev.y, prev.x) : 0f;
+            float ang = baseAng + Mathf.PI * (0.6f + (float)rng.NextDouble() * 0.8f);
+            float dist = GrabRadiusMin + (float)rng.NextDouble() * (GrabRadiusMax - GrabRadiusMin);
+            Vector2 to = u.Pos + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * dist;
+            to.x = Mathf.Clamp(to.x, FieldConst.Radius, FieldConst.Width - FieldConst.Radius);
+            to.y = Mathf.Clamp(to.y, FieldConst.Radius, FieldConst.Height - FieldConst.Radius);
+            u.SlamFrom = held.Pos;
+            u.SlamTo = to;
+            u.SlamTimer += segment;
+            u.Slamming = true;
+            held.HeldTimer = Mathf.Max(held.HeldTimer, segment * u.SlamsLeft + 0.05f);
+            held.AirTimer = held.AirTotal = segment;
+            held.AirHeight = GrabArcHeight;
+            Fx(FieldEffectKind.Leap, u, u.SlamFrom, to, 0.5f, s.FxColor, 0f, segment);
+        }
+
         /// <summary>나눠 때리는 연타 (염호멸연격 · 심연난무).</summary>
         void BarrageStep(FieldUnit u, float dt)
         {
@@ -1588,8 +1678,14 @@ namespace TextSlayers
             if (src.AppliesErosion && src.IsPlayer != tgt.IsPlayer) tgt.DarkErosion = Mathf.Min(MaxErosion, tgt.DarkErosion + 1);
             if (tgt.CounterTimer > 0f && tgt.CounterSkill != null && src.IsPlayer != tgt.IsPlayer)
             {
+                // 방어를 즉시 풀고 베기 (사용자 2026-11-27): 자세 · 사용 중 상태 · 방어 이펙트를 모두 해제
                 tgt.CounterTimer = 0f;
                 tgt.RootTimer = 0f;
+                tgt.CastTimer = 0f;
+                tgt.ActionTimer = 0f;
+                if (tgt.CounterStance != null) { Effects.Remove(tgt.CounterStance); tgt.CounterStance = null; }
+                Vector2 toward = src.Pos - tgt.Pos;
+                if (toward.sqrMagnitude > 0.0001f) tgt.Facing = toward.normalized;
                 tgt.FollowUps.Add(new FollowUpEntry { Skill = tgt.CounterSkill, Delay = 0f });   // 즉시 반격
             }
             if (!tgt.Immortal) tgt.C.Hp = Mathf.Max(0, tgt.C.Hp - r.Amount);
@@ -1638,7 +1734,8 @@ namespace TextSlayers
                         if (p.BasicKnock > 0) Knockback(f, p.Dir, p.BasicKnock);
                         if (sk.ExplodeRadius > 0f)
                             foreach (var o in FoesAround(p.Source, p.Pos, sk.ExplodeRadius)) if (o != f) Apply(p.Source, o, sk, 1f, p.Pos);
-                        Fx(sk.Fx2, p.Source, p.Pos, p.Pos, sk.Radius > 0f ? sk.Radius : 0.6f, sk.FxColor);
+                        var impact = Fx(sk.Fx2, p.Source, p.Pos, p.Pos, sk.Radius > 0f ? sk.Radius : 0.6f, sk.FxColor);
+                        if (impact != null) impact.Dir = p.Dir;     // 적중 이펙트는 탄이 날아온 방향을 따른다
                     }
                     if (!(sk.Shape != SkillShape.None && sk.Pierce)) { p.Done = true; break; }
                 }
@@ -1698,7 +1795,7 @@ namespace TextSlayers
                     var hit = FoesAround(u, u.Pos, s.Radius);
                     if (hit.Count == 0) return false;
                     foreach (var f in hit) Apply(u, f, s, roll, u.Pos);
-                    var around = Fx(s.Fx, u, u.Pos, u.Pos, s.Radius, col, 0f, s.FxTime, s.Hits);
+                    var around = Fx(s.Fx, u, u.Pos, u.Pos, s.Radius, col, 0f, s.FxTime, s.Fx == FieldEffectKind.BladeSwing ? 360 : s.Hits);
                     if (around != null && s.Fx == FieldEffectKind.Whirl) around.Target = u;
                     Fx(s.Fx2, u, u.Pos, u.Pos, s.Radius, col, s.FxDelay2);
                     break;
@@ -1786,7 +1883,7 @@ namespace TextSlayers
                         hit = hit.GetRange(0, Mathf.Clamp(Mathf.CeilToInt(hit.Count * roll), 1, hit.Count));
                     foreach (var f in hit) Apply(u, f, s, roll, u.Pos);
                     Fx(s.Fx, u, u.Pos, end, width, col);
-                    if (s.Fx2 == FieldEffectKind.BladeSlam) Fx(s.Fx2, u, u.Pos, end, width, col, 0f, 0.35f);
+                    if (s.Fx2 == FieldEffectKind.BladeSlam || s.Fx2 == FieldEffectKind.SwordCut) Fx(s.Fx2, u, u.Pos, end, width, col, 0f, 0.35f);
                     break;
                 }
 
@@ -1850,8 +1947,19 @@ namespace TextSlayers
                         };
                     }
 
-                    u.DashSpeed = FieldConst.DashSpeed;
-                    float travel = Vector2.Distance(start, end) / FieldConst.DashSpeed;
+                    if (s.Teleport)
+                    {
+                        // 순간이동: 바로 도착. 출발 · 도착 지점에 섬광, 경로에 일섬
+                        u.Pos = end;
+                        Fx(s.Fx, u, start, end, 0.5f, col);
+                        Fx(FieldEffectKind.Burst, u, start, start, 0.7f, col);
+                        Fx(FieldEffectKind.Burst, u, end, end, 0.7f, col);
+                        var slash = Fx(s.Fx2, u, t.Pos, t.Pos, 1f, col, 0.03f);
+                        if (slash != null) slash.Target = t;
+                        break;
+                    }
+                    u.DashSpeed = FieldConst.DashSpeed * (s.DashSpeedMul > 0f ? s.DashSpeedMul : 1f);
+                    float travel = Vector2.Distance(start, end) / u.DashSpeed;
                     if (s.OffMapTime > 0f)
                     {
                         // 수직으로 맵을 벗어났다가 대상 위치에 낙하
@@ -1895,6 +2003,7 @@ namespace TextSlayers
                     var pts = new Vector2[picks.Count];
                     for (int i = 0; i < picks.Count; i++) { pts[i] = picks[i].Pos; Apply(u, picks[i], s, roll, u.Pos); }
                     var ae = Fx(s.Fx, u, u.Pos, u.Pos, s.Radius, col, 0f, s.FxTime, picks.Count, pts);
+                    if (s.Fx == FieldEffectKind.Missiles) u.CaseDownUntil = Time + 0.35f + picks.Count * 0.08f + 0.9f;
                     if (ae != null && s.Fx == FieldEffectKind.Links) ae.Units = picks.ToArray();   // 흑색 사슬: 적들에게 붙어 따라다님
                     Fx(s.Fx2, u, u.Pos, u.Pos, s.Radius, col, s.FxDelay2);
                     break;
@@ -1941,61 +2050,28 @@ namespace TextSlayers
                         u.CounterTimer = s.FxTime;
                         u.CounterSkill = FieldData.Skill(s.CounterSkill);
                     }
-                    Fx(s.Fx, u, u.Pos, u.Pos, 0.6f, col, 0f, s.FxTime);
+                    var stance = Fx(s.Fx, u, u.Pos, u.Pos, 0.6f, col, 0f, s.FxTime);
+                    if (!string.IsNullOrEmpty(s.CounterSkill)) u.CounterStance = stance;
                     Fx(s.Fx2, u, u.Pos, u.Pos, 0.6f, col, s.FxDelay2, s.FxTime);
                     break;
 
-                case SkillShape.GrabSlam:   // 에피타이저: 잡고, 주변 랜덤 위치에 내려찍고, 뱉어낸다
+                case SkillShape.GrabSlam:   // 에피타이저: 제압 → 주변 여러 곳에 포물선으로 내려찍기 → 뱉기 (GrabStep)
                 {
-                    if (u.Grabbed != null && (u.Grabbed.HeldTimer <= 0f || !u.Grabbed.Alive)) u.Grabbed = null;   // 끊긴 이전 잡기 정리
-                    bool first = u.Grabbed == null;
-                    if (first)
-                    {
-                        t = PickFoe(u, s, current, range);
-                        if (t == null) return false;
-                        u.Grabbed = t;
-                        u.BarrageLeft = Mathf.Max(1, s.Hits);       // 남은 내려찍기 횟수
-                        t.HeldTimer = s.FollowDelay * (s.Hits + 1) + 0.2f;
-                        var g = Fx(FieldEffectKind.Grab, u, t.Pos, t.Pos, s.Radius, col, 0f, t.HeldTimer);
-                        if (g != null) g.Target = t;
-                    }
-                    else
-                    {
-                        var held = u.Grabbed;
-                        if (!held.Alive) { u.Grabbed = null; return true; }
-                        if (u.BarrageLeft > 0)
-                        {
-                            // 글러트니 주변 랜덤 위치로 옮겨 내려찍는다
-                            float ang = (float)(rng.NextDouble() * Mathf.PI * 2.0), dist = 1.8f + (float)rng.NextDouble() * 1.2f;
-                            held.Pos = u.Pos + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * dist;
-                            ClampToField(held);
-                            u.Facing = (held.Pos - u.Pos).normalized;
-                            SkillHit(u, held, s);
-                            foreach (var f in FoesAround(u, held.Pos, s.Radius))
-                            {
-                                if (f == held) continue;
-                                SkillHit(u, f, s);
-                                f.StunTimer = Mathf.Max(f.StunTimer, s.Stun * (1f - f.Toughness / 100f));
-                                Knockback(f, f.Pos - held.Pos, 2);
-                            }
-                            Fx(FieldEffectKind.CrossSlam, u, held.Pos, held.Pos, s.Radius, col);
-                            Fx(FieldEffectKind.Burst, u, held.Pos, held.Pos, s.Radius, col, 0.05f);
-                            u.BarrageLeft--;
-                        }
-                        else
-                        {
-                            // 뱉어낸다
-                            held.HeldTimer = 0f;
-                            u.Grabbed = null;
-                            held.StunTimer = Mathf.Max(held.StunTimer, s.Stun * (1f - held.Toughness / 100f));
-                            Knockback(held, held.Pos - u.Pos, 2);
-                            return true;
-                        }
-                    }
-                    u.RootTimer = Mathf.Max(u.RootTimer, s.FollowDelay);
-                    u.ChannelTimer = Mathf.Max(u.ChannelTimer, s.FollowDelay);
-                    u.FollowUps.Add(new FollowUpEntry { Skill = s, Delay = s.FollowDelay, Primary = u.Grabbed });
-                    if (!first) return true;
+                    if (u.Grabbed != null) return false;
+                    t = PickFoe(u, s, current, range);
+                    if (t == null) return false;
+                    float total = GrabSubdueTime + GrabSlamTime + 0.05f;
+                    u.Grabbed = t;
+                    u.GrabSkill = s;
+                    u.SlamsLeft = Mathf.Max(1, s.Hits);
+                    u.SlamTimer = GrabSubdueTime;               // 제압
+                    u.SlamTo = t.Pos;
+                    u.Slamming = false;
+                    t.HeldTimer = total;
+                    u.ChannelTimer = Mathf.Max(u.ChannelTimer, total);
+                    u.RootTimer = Mathf.Max(u.RootTimer, total);
+                    var g = Fx(FieldEffectKind.Grab, u, t.Pos, t.Pos, s.Radius, col, 0f, total);
+                    if (g != null) g.Target = t;
                     break;
                 }
 

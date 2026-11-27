@@ -69,7 +69,7 @@ namespace TextSlayers
             new FieldSkillDef { Pistol = true, Id = "vd_incendiary", KnockLevel = 2, Name = "작열탄", Shape = SkillShape.Projectile, Range = 9f, Shot = ShotStyle.Bullet, Shots = 3,
                 ExplodeRadius = 1f, Fx2 = FieldEffectKind.Burst, Radius = 1f, FxColor = SkillColor.Fire },
             new FieldSkillDef { Pistol = true, Id = "vd_freeze", Name = "빙결탄", Shape = SkillShape.Projectile, Range = 9f, Shot = ShotStyle.Bullet, Shots = 3,
-                Fx2 = FieldEffectKind.Burst, Radius = 0.6f, FxColor = SkillColor.Ice },
+                Fx2 = FieldEffectKind.IceShatter, Radius = 0.6f, FxColor = SkillColor.Ice },
             new FieldSkillDef { Pistol = true, Id = "vd_pierce", KnockLevel = 1, Name = "관통탄", Shape = SkillShape.Projectile, Range = 12f, Shot = ShotStyle.Bullet, Shots = 3, Pierce = true,
                 Fx2 = FieldEffectKind.Burst, Radius = 0.5f, FxColor = SkillColor.Steel },
             new FieldSkillDef { Id = "vd_pilebunker", KnockLevel = 4, Name = "파일벙커 / 벙커버스터", Shape = SkillShape.Dash, Range = 7f, DashReturn = true,
@@ -174,8 +174,8 @@ new FieldSkillDef { Id = "agni_okyeom", Name = "옥염의 멸화 - 권", Shape =
                 Fx = FieldEffectKind.None, FxColor = SkillColor.Holy, Quiet = true },   // 주대상 제외 넉백 4 (사용자 2026-11-26)
 
             // ── 가니악 벤데스트라 (심연 · 마왕) ──
-            new FieldSkillDef { Id = "gn_fang", KnockLevel = 2, Name = "어둠의 송곳니", Shape = SkillShape.Dash, Pick = TargetPick.Farthest, Range = 14f,
-                Fx = FieldEffectKind.Trail, Fx2 = FieldEffectKind.Burst, Radius = 0.9f, FxColor = SkillColor.Abyss },
+            new FieldSkillDef { Id = "gn_fang", KnockLevel = 2, DashSpeedMul = 1.4f, Name = "어둠의 송곳니", Shape = SkillShape.Dash, Pick = TargetPick.Farthest, Range = 14f,
+                Fx = FieldEffectKind.Afterimage, Fx2 = FieldEffectKind.Thrust, Radius = 0.9f, FxColor = SkillColor.Abyss },
             new FieldSkillDef { Id = "gn_wave", KnockLevel = 4, Name = "어둠의 파동", Shape = SkillShape.Around, Radius = 3.5f, 
                 Fx = FieldEffectKind.Pulse, Fx2 = FieldEffectKind.Burst, FxColor = SkillColor.Abyss },
             new FieldSkillDef { Id = "gn_grasp", Name = "어둠의 손아귀", Shape = SkillShape.Target, Pick = TargetPick.Farthest, Range = 16f, PullToSelf = true,
@@ -191,7 +191,7 @@ new FieldSkillDef { Id = "agni_okyeom", Name = "옥염의 멸화 - 권", Shape =
 
             // ── 레온하르트 (사자왕) ──
             new FieldSkillDef { Id = "lh_lion_crash", KnockLevel = 3, KnockSkipPrimary = true, Name = "라이온 크래시", Shape = SkillShape.Dash, Range = 6f, Stun = 3f, Radius = 1.5f,
-                Fx = FieldEffectKind.Trail, Fx2 = FieldEffectKind.Burst, FxColor = SkillColor.Gold },
+                Fx = FieldEffectKind.Trail, Fx2 = FieldEffectKind.FistSlam, FxColor = SkillColor.Gold },
             new FieldSkillDef { Id = "lh_roar", Name = "사자후", Shape = SkillShape.AllEnemies, Stun = 1f,
                 Fx = FieldEffectKind.None, Fx2 = FieldEffectKind.Roar, FollowUp = "lh_roar_buff", FollowDelay = 0.1f, FxColor = SkillColor.Gold },
             new FieldSkillDef { Id = "lh_roar_buff", Name = "사자후 (아군 강화)", Shape = SkillShape.AllyAll,
@@ -203,9 +203,9 @@ new FieldSkillDef { Id = "agni_okyeom", Name = "옥염의 멸화 - 권", Shape =
             new FieldSkillDef { Id = "lh_counter_slash", Name = "카운터 슬래시", Shape = SkillShape.Self, Root = 3f, FxTime = 3f, CounterSkill = "lh_counter_strike",
                 Fx = FieldEffectKind.Shield, FxColor = SkillColor.Gold },
             new FieldSkillDef { Id = "lh_counter_strike", KnockLevel = 3, Name = "카운터 슬래시 (반격)", Shape = SkillShape.Around, Radius = 2.5f, 
-                Fx = FieldEffectKind.Spin, Fx2 = FieldEffectKind.Pulse, FxColor = SkillColor.Gold },   // 중간 범위 (사용자 2026-11-26)
-            new FieldSkillDef { Id = "lh_sky_splitter", KnockLevel = 1, Name = "하늘가르기", Shape = SkillShape.Pierce, Range = 16f,
-                CastFx = FieldEffectKind.BladeRaise, Fx = FieldEffectKind.Beam, Fx2 = FieldEffectKind.BladeSlam, Radius = 1f, FxColor = SkillColor.Gold },
+                Fx = FieldEffectKind.BladeSwing, Fx2 = FieldEffectKind.Pulse, FxColor = SkillColor.Gold },   // 중간 범위 (사용자 2026-11-26), 대검 베기
+            new FieldSkillDef { Id = "lh_sky_splitter", KnockLevel = 1, Name = "하늘가르기", Shape = SkillShape.Pierce, Range = 14f,
+                CastFx = FieldEffectKind.SwordRaise, Fx = FieldEffectKind.WhiteSlash, Fx2 = FieldEffectKind.SwordCut, Radius = 1f, FxColor = SkillColor.Gold },
 
             // ── 펜리르 (늑대왕 · 표식) ──
             new FieldSkillDef { Id = "fr_hunt_leap", KnockLevel = 1, Name = "사냥 도약", Shape = SkillShape.Leap, Pick = TargetPick.Farthest, Range = 14f, Marks = true, Radius = 0.9f,
@@ -222,13 +222,13 @@ new FieldSkillDef { Id = "agni_okyeom", Name = "옥염의 멸화 - 권", Shape =
                 Fx = FieldEffectKind.Pulse, Fx2 = FieldEffectKind.Burst, FxColor = SkillColor.Frost },
 
             // ── 사하라 (부적 검사) ──
-            new FieldSkillDef { Id = "sh_flash", KnockLevel = 1, Name = "일섬", Shape = SkillShape.Dash, Pick = TargetPick.Farthest, Range = 14f, Pierce = true,
-                Fx = FieldEffectKind.Beam, Radius = 0.4f, FxColor = SkillColor.Talisman },
+            new FieldSkillDef { Id = "sh_flash", KnockLevel = 1, Name = "일섬", Teleport = true, Shape = SkillShape.Dash, Pick = TargetPick.Farthest, Range = 14f, Pierce = true,
+                Fx = FieldEffectKind.Beam, Fx2 = FieldEffectKind.Slash, Radius = 0.4f, FxColor = SkillColor.Talisman },
             new FieldSkillDef { Id = "sh_seal", Name = "봉인부", Shape = SkillShape.Projectile, Pick = TargetPick.HighestMag, Range = 10f, Shot = ShotStyle.Card,
                 Fx2 = FieldEffectKind.Burst, Radius = 0.7f, FxColor = SkillColor.Talisman },
             new FieldSkillDef { Id = "sh_suppress", Name = "억압부", Shape = SkillShape.Projectile, Pick = TargetPick.HighestAtk, Range = 10f, Shot = ShotStyle.Card,
                 Fx2 = FieldEffectKind.Burst, Radius = 0.7f, FxColor = SkillColor.Gold },
-            new FieldSkillDef { Id = "sh_dark_cut", KnockLevel = 1, Name = "어둠 가르기", Shape = SkillShape.Cone, Radius = 3.5f, Angle = 160f,
+            new FieldSkillDef { Id = "sh_dark_cut", KnockLevel = 1, Name = "어둠 가르기", Shape = SkillShape.Around, Radius = 3.5f,
                 Fx = FieldEffectKind.BladeSwing, FxColor = SkillColor.Talisman },
             new FieldSkillDef { Id = "sh_annihilate", Name = "멸령부", Shape = SkillShape.Dash, Pick = TargetPick.HighestHp, Range = 10f, Hits = 5, Root = 1.2f, FxTime = 1.2f,
                 HideWhileUsing = true, Fx = FieldEffectKind.Trail, Fx2 = FieldEffectKind.Blink, Radius = 1.3f, FxColor = SkillColor.Talisman },   // 대상 주변 순간이동 · 잔상 · 참격
@@ -257,7 +257,7 @@ new FieldSkillDef { Id = "agni_okyeom", Name = "옥염의 멸화 - 권", Shape =
                 Fx = FieldEffectKind.Cone, FxColor = SkillColor.Gray },
             new FieldSkillDef { Id = "mel_hors", KnockLevel = 1, Name = "식 - 오르되브르", Shape = SkillShape.TargetArea, Range = 8f, Radius = 1.6f,
                 Fx = FieldEffectKind.Pillar, Fx2 = FieldEffectKind.Bite, FxDelay2 = 0.15f, FxColor = SkillColor.Gray },
-            new FieldSkillDef { Id = "mel_appetizer", Name = "식 - 에피타이저", Shape = SkillShape.GrabSlam, Range = 4f, Hits = 3, Stun = 1f,
+            new FieldSkillDef { Id = "mel_appetizer", Name = "식 - 에피타이저", Shape = SkillShape.GrabSlam, Range = 4f, Hits = 6, Stun = 1f,
                 Fx = FieldEffectKind.Grab, Radius = 1.3f,  FollowDelay = 0.45f, FxColor = SkillColor.Gray },
             new FieldSkillDef { Id = "mel_appetizer_slam", Name = "식 - 에피타이저 (휘두르기)", Shape = SkillShape.Around, Radius = 2.5f, Stun = 1f,
                 Fx = FieldEffectKind.Spin, Fx2 = FieldEffectKind.Pulse, FollowUp = "mel_appetizer_smash", FollowDelay = 0.4f, FxColor = SkillColor.Gray, Quiet = true },

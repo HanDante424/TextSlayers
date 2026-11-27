@@ -5,9 +5,30 @@ namespace TextSlayers
     /// <summary>세부 연출 이펙트 (사용자 2026-11-26): 대검 · 십자가 · 미사일 · 얼음 · 잡기 · 연타 등. 전부 연출용 [임시].</summary>
     public static partial class GameView
     {
-        const float FxBigSlash = 0.4f, FxCoin = 0.9f, FxSlantPillar = 0.5f, FxCrossSlam = 0.45f, FxMaw = 0.65f,
+        const float FxBigSlash = 0.4f, FxCoin = 0.9f, FxSlantPillar = 0.5f, FxCrossSlam = 0.45f,
                     FxFan = 0.45f, FxLeapOff = 0.3f, FxBladeSwing = 0.4f, FxMissileGap = 0.08f, FxMissileRise = 0.4f,
-                    FxMissileFall = 0.35f, FxMissileBoom = 0.3f, FxCrossFallDrop = 0.25f, FxCrossFallAfter = 0.4f;
+                    FxMissileFall = 0.5f, FxMissileBoom = 0.3f, FxCasePlant = 0.35f, FxCrossFallDrop = 0.25f, FxCrossFallAfter = 0.4f;
+
+        // 일식의 아가리 (사용자 2026-11-27): 벌림 → 빠르게 닫힘 → 닫힌 채 0.25초 → 0.25초 동안 사라짐
+        const float MawOpen = 0.2f, MawClose = 0.06f, MawHold = 0.25f, MawFade = 0.25f;
+        const float FxMaw = MawOpen + MawClose + MawHold + MawFade;
+
+        static Texture2D fxDiamond;
+        static Texture2D Diamond => fxDiamond != null ? fxDiamond
+            : fxDiamond = MakeFxTex(64, (u, v) => Mathf.Clamp01((1f - Mathf.Abs(u) - Mathf.Abs(v)) * 10f));
+
+        const float MissileRiseHeight = 3f;   // 다연장 탄두 수직 상승 높이 (칸) [임시]
+        const float SkyCutTime = 0.14f;      // 하늘가르기: 내려베는 시간
+
+        /// <summary>대검과 궤적이 같이 쓰는 각도: 머리 위(뒤로 살짝 젖힘) → 바라보는 방향 아래.</summary>
+        static float SkyCutAngle(Vector2 dir, float age)
+        {
+            float side = dir.x >= 0f ? 1f : -1f;
+            float k = Mathf.Clamp01(age / SkyCutTime);
+            return AngleOf(dir) + side * Mathf.Lerp(-105f, 0f, k * k);   // 끝 각도 = 직선 잔흔 방향 (검과 잔흔이 맞게)
+        }
+        const float GhostLinger = 0.35f;     // 잔상이 남는 시간
+        const int GhostCount = 8;
 
         static float SpecialLength(FieldEffect e)
         {
@@ -21,8 +42,14 @@ namespace TextSlayers
                 case FieldEffectKind.FanWave: return FxFan;
                 case FieldEffectKind.LeapOff: return FxLeapOff;
                 case FieldEffectKind.FireLine: return 0.7f;
+                case FieldEffectKind.Afterimage: return Mathf.Max(0.1f, e.Duration) + GhostLinger;
+                case FieldEffectKind.Thrust: return 0.4f;
+                case FieldEffectKind.FistSlam: return 0.65f;
+                case FieldEffectKind.SwordCut: return 0.4f;
+                case FieldEffectKind.WhiteSlash: return 0.65f;
+                case FieldEffectKind.IceShatter: return 0.55f;
                 case FieldEffectKind.BladeSwing: return FxBladeSwing;
-                case FieldEffectKind.Missiles: return Mathf.Max(1, e.Count) * FxMissileGap + FxMissileRise + FxMissileFall + FxMissileBoom;
+                case FieldEffectKind.Missiles: return FxCasePlant + Mathf.Max(1, e.Count) * FxMissileGap + FxMissileRise + FxMissileFall + FxMissileBoom;
                 case FieldEffectKind.CrossFall: return e.Duration + FxCrossFallAfter;
                 case FieldEffectKind.Landing: return e.Duration + 0.4f;
                 case FieldEffectKind.BladeSlam: return Mathf.Max(0.35f, e.Duration);
@@ -60,6 +87,155 @@ namespace TextSlayers
             if (dir.y > 0.0001f) len = Mathf.Min(len, (field.yMax - from.y) / dir.y);
             if (dir.y < -0.0001f) len = Mathf.Min(len, (field.y - from.y) / dir.y);
             return Mathf.Max(0f, len);
+        }
+
+        static Vector2 Arc(Vector2 a, Vector2 ctrl, Vector2 b, float t)
+            => Vector2.Lerp(Vector2.Lerp(a, ctrl, t), Vector2.Lerp(ctrl, b, t), t);
+
+        /// <summary>일반 대검: 자루 · 코등이 · 강철 날 · 칼끝. pivot 은 손 위치.</summary>
+        static void DrawGreatSword(Vector2 hand, float angleDeg, float U, float alpha)
+        {
+            Vector2 dir = Polar(angleDeg);
+            Vector2 perp = new Vector2(-dir.y, dir.x);
+            float length = U * 2.2f, width = U * 0.36f;
+            DrawFxRect(Texture2D.whiteTexture, hand + dir * (U * 0.1f), U * 0.55f, U * 0.13f, WoodShaft, alpha, angleDeg);                          // 자루
+            DrawFxRect(fxDisc, hand - dir * (U * 0.17f), U * 0.24f, U * 0.24f, new Color(0.75f, 0.62f, 0.3f), alpha);                                // 폼멜
+            DrawFxRect(Texture2D.whiteTexture, hand + dir * (U * 0.4f), U * 0.14f, width * 2.4f, new Color(0.75f, 0.62f, 0.3f), alpha, angleDeg);   // 코등이
+            Vector2 start = hand + dir * (U * 0.46f);
+            Vector2 mid = start + dir * (length * 0.42f);
+            DrawFxRect(Texture2D.whiteTexture, mid, length * 0.84f, width, SteelBlade, alpha, angleDeg);
+            DrawFxRect(Texture2D.whiteTexture, mid, length * 0.8f, width * 0.2f, new Color(0.55f, 0.57f, 0.68f), alpha, angleDeg);
+            DrawFxRect(Texture2D.whiteTexture, mid + perp * (width * 0.4f), length * 0.84f, width * 0.12f, Color.white, alpha, angleDeg);
+            DrawFxRect(Diamond, start + dir * (length * 0.84f), length * 0.3f, width, SteelBlade, alpha, angleDeg);
+        }
+
+        // ───────── 바닥 잔흔 (유닛보다 아래) ─────────
+
+        static Material fillMaterial;
+
+        static void DrawGroundEffects(Rect field, float unit, FieldBattle b)
+        {
+            EnsureFx();
+            foreach (var e in b.Effects)
+            {
+                if (e.Kind != FieldEffectKind.WhiteSlash) continue;
+                float age = b.Time - e.Start - e.Delay;
+                float len = SpecialLength(e);
+                if (age < 0f || age >= len) continue;
+                DrawSkyTrace(field, unit, e, age, age / len);
+            }
+        }
+
+        /// <summary>
+        /// 하늘가르기 잔흔 (사용자 2026-11-27): 검이 지나간 각도만큼의 부채꼴을 안까지 채우고(바깥은 진하게, 안은 투명하게),
+        /// 반지름은 직선 잔흔 길이만큼 커진다. 검의 마지막 각도 = 직선 잔흔 방향.
+        /// </summary>
+        static void DrawSkyTrace(Rect field, float unit, FieldEffect e, float age, float t)
+        {
+            Vector2 P(Vector2 v) => new Vector2(field.x + v.x * unit, field.y + v.y * unit);
+            Vector2 from = P(e.Origin);
+            Vector2 dir = (P(e.End) - from).sqrMagnitude > 1f ? (P(e.End) - from).normalized : e.Dir;
+            // 잔흔 사거리는 항상 같다 (사용자 2026-11-27): 스킬 사거리 그대로. 필드 밖으로 나가는 부분은 잘라서 그린다
+            float full = Vector2.Distance(from, P(e.End));
+            float fade = t < 0.45f ? 1f : 1f - (t - 0.45f) / 0.55f;
+            float grow = Ease(Mathf.Clamp01(age / (SkyCutTime + 0.06f)));
+            float radius = Mathf.Lerp(unit * 3f, full, grow);                          // 베면서 잔흔 거리까지 커진다
+
+            float start = SkyCutAngle(e.Dir, 0f);
+            float swept = Mathf.DeltaAngle(start, SkyCutAngle(e.Dir, age));
+            if (Mathf.Abs(swept) > 1f) FillSector(field, from, radius, start, swept, fade);
+
+            // 직선 잔흔
+            float line = radius;
+            float hitWidth = e.Radius * 2f * unit;                                     // 실제 판정 폭
+            if (age > SkyCutTime * 0.6f)
+            {
+                Vector2 head = from + dir * Mathf.Min(line, DistanceToEdge(field, from, dir));
+                DrawLine(from, head, hitWidth, Color.white, 0.22f * fade);
+                DrawLine(from, head, hitWidth * 0.34f, Color.white, 0.75f * fade);
+                DrawLine(from, head, hitWidth * 0.1f, Color.white, fade);
+            }
+        }
+
+        /// <summary>
+        /// 중심에서 radius 까지 채운 부채꼴. 바깥 가장자리는 불투명, 안쪽으로 갈수록 투명. 필드 밖은 가장자리에서 자른다.
+        /// </summary>
+        static void FillSector(Rect field, Vector2 center, float radius, float startDeg, float sweepDeg, float fade)
+        {
+            if (Event.current.type != EventType.Repaint) return;
+            if (fillMaterial == null)
+            {
+                var shader = Shader.Find("Hidden/Internal-Colored");
+                if (shader == null) return;
+                fillMaterial = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+                fillMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                fillMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                fillMaterial.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
+                fillMaterial.SetInt("_ZWrite", 0);
+                fillMaterial.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
+            }
+
+            const int Seg = 40;
+            // 반지름 비율별 불투명도: 안 → 밖
+            float[] at = { 0f, 0.45f, 0.72f, 0.9f, 0.975f, 1f };
+            float[] alpha = { 0.02f, 0.08f, 0.22f, 0.55f, 0.95f, 0.85f };
+
+            GL.PushMatrix();
+            fillMaterial.SetPass(0);
+            GL.LoadOrtho();
+            GL.Begin(GL.TRIANGLES);
+            // 점 = (x, y, 불투명도). 원 모양은 그대로 두고 필드 밖 부분만 잘라 낸다.
+            Vector3 Point(float deg, int ring)
+            {
+                Vector2 p = center + Polar(deg) * (radius * at[ring]);
+                return new Vector3(p.x, p.y, alpha[ring] * fade);
+            }
+            for (int i = 0; i < Seg; i++)
+            {
+                float a0 = startDeg + sweepDeg * i / Seg, a1 = startDeg + sweepDeg * (i + 1) / Seg;
+                for (int ring = 0; ring < at.Length - 1; ring++)
+                {
+                    EmitClipped(field, Point(a0, ring), Point(a0, ring + 1), Point(a1, ring + 1));
+                    EmitClipped(field, Point(a0, ring), Point(a1, ring + 1), Point(a1, ring));
+                }
+            }
+            GL.End();
+            GL.PopMatrix();
+        }
+
+        static readonly System.Collections.Generic.List<Vector3> clipA = new System.Collections.Generic.List<Vector3>(8);
+        static readonly System.Collections.Generic.List<Vector3> clipB = new System.Collections.Generic.List<Vector3>(8);
+
+        /// <summary>삼각형(x, y, 알파)을 area 사각형으로 잘라 GL 에 보낸다 (GL.TRIANGLES 안에서 호출).</summary>
+        static void EmitClipped(Rect area, Vector3 a, Vector3 b, Vector3 c)
+        {
+            clipA.Clear(); clipA.Add(a); clipA.Add(b); clipA.Add(c);
+            for (int edge = 0; edge < 4 && clipA.Count > 0; edge++)
+            {
+                clipB.Clear();
+                for (int i = 0; i < clipA.Count; i++)
+                {
+                    Vector3 p = clipA[i], q = clipA[(i + 1) % clipA.Count];
+                    float dp = Inside(area, p, edge), dq = Inside(area, q, edge);
+                    if (dp >= 0f) clipB.Add(p);
+                    if ((dp >= 0f) != (dq >= 0f)) clipB.Add(Vector3.Lerp(p, q, dp / (dp - dq)));
+                }
+                clipA.Clear();
+                clipA.AddRange(clipB);
+            }
+            for (int i = 1; i + 1 < clipA.Count; i++)
+            {
+                GlVertex(clipA[0]); GlVertex(clipA[i]); GlVertex(clipA[i + 1]);
+            }
+        }
+
+        static float Inside(Rect area, Vector3 p, int edge)
+            => edge == 0 ? p.x - area.x : edge == 1 ? area.xMax - p.x : edge == 2 ? p.y - area.y : area.yMax - p.y;
+
+        static void GlVertex(Vector3 v)
+        {
+            GL.Color(new Color(1f, 1f, 1f, v.z));
+            GL.Vertex3(v.x / vw, 1f - v.y / vh, 0f);
         }
 
         static void DrawSpecial(Rect field, float unit, float U, FieldBattle b, FieldEffect e, Vector2 c, Vector2 follow,
@@ -104,10 +280,19 @@ namespace TextSlayers
                 }
                 case FieldEffectKind.BladeSwing:  // 대검을 옆으로 휘둘러 베기
                 {
-                    float sweep = e.Count > 0 ? Mathf.Min(220f, e.Count) : 150f;
+                    bool full = e.Count >= 360;      // 전방위 베기: 한 바퀴
+                    float sweep = full ? 360f : e.Count > 0 ? Mathf.Min(220f, e.Count) : 150f;
                     float ang = dirAng - sweep * 0.5f + sweep * Ease(t);
-                    float length = Mathf.Max(U * 2f, R);
+                    float length = full ? e.Radius * unit : Mathf.Max(U * 2f, R);
                     float a = t < 0.75f ? 1f : (1f - t) / 0.25f;
+                    if (full)
+                    {
+                        // 지나간 자리에 잔상 호 + 범위 고리
+                        for (int k = 1; k <= 4; k++)
+                            if (sweep * Ease(t) > k * 55f)
+                                DrawFx(fxArc, follow, length * 2.2f, main, 0.55f * a * (1f - k * 0.18f), ang - k * 55f);
+                        DrawFx(fxRing, follow, length * 2.3f * Mathf.Lerp(0.6f, 1f, Ease(t)), light, 0.6f * (1f - t));
+                    }
                     DrawFx(fxArc, follow, length * 2.3f, light, 0.8f * a, ang - 18f);
                     DrawFx(fxArc, follow, length * 2.0f, main, 0.6f * a, ang - 38f);
                     DrawBlade(follow, ang, length, U * 0.42f, main, a);
@@ -176,40 +361,80 @@ namespace TextSlayers
                 {
                     float pulse = 1f + 0.08f * Mathf.Sin(age * 14f);
                     float appear = Mathf.Clamp01(age / 0.15f);
+                    var held = e.Target;
+                    if (held != null && held.AirTimer > 0f && held.AirTotal > 0f)
+                        c.y -= held.AirHeight * unit * Mathf.Sin(Mathf.PI * Mathf.Clamp01(1f - held.AirTimer / held.AirTotal));
                     DrawFx(fxDisc, c, U * 2.2f * pulse, new Color(0.25f, 0.25f, 0.3f), 0.45f);
                     DrawFx(fxRing, c, U * Mathf.Lerp(3f, 1.8f, appear) * pulse, main, 1f);
                     DrawFx(fxRing, c, U * 1.5f * pulse, light, 0.8f);
                     DrawLine(follow, c, U * 0.3f, main, 0.6f);
                     break;
                 }
-                case FieldEffectKind.Missiles:    // 케이스를 앞에 놓고 → 미사일이 솟았다가 대상에 포격 (화면 밖으로 나가지 않음)
+                case FieldEffectKind.Missiles:    // 등의 케이스를 앞에 수직으로 내려박고 → 미사일 수직 상승 → 폭격 (사용자 2026-11-27)
                 {
                     if (e.Points == null) break;
-                    Vector2 caseAt = follow + e.Dir * (unit * 1.1f);
+                    Vector2 self = P(e.Origin);
+                    float side = e.Dir.x >= 0f ? 1f : -1f;
+                    Vector2 planted = self + new Vector2(side * unit * 1.15f, -unit * 0.15f);
                     float total = SpecialLength(e);
                     float ca = Mathf.Min(1f, (total - age) / 0.3f);
-                    DrawFxRect(Texture2D.whiteTexture, caseAt, unit * 0.8f, unit * 0.55f, new Color(0.35f, 0.33f, 0.3f), ca);
-                    DrawFxRect(Texture2D.whiteTexture, caseAt + new Vector2(0f, -unit * 0.2f), unit * 0.8f, unit * 0.1f, new Color(0.65f, 0.58f, 0.45f), ca);
-                    float topY = field.y + unit * 0.6f;
+
+                    // 케이스: 등 뒤에서 머리 위로 넘겨 앞에 세로로 내려박는다
+                    float k0 = Mathf.Clamp01(age / FxCasePlant);
+                    float fall = k0 * k0;
+                    Vector2 back = self + new Vector2(-side * unit * 0.55f, -unit * 0.1f);
+                    Vector2 at = Vector2.Lerp(back, planted, fall);
+                    at.y -= Mathf.Sin(fall * Mathf.PI) * unit * 1.6f;
+                    float spin = (1f - fall) * -120f * side;
+                    float cw = unit * 0.55f, ch = unit * 1.35f;
+                    DrawFxRect(Texture2D.whiteTexture, at, cw, ch, new Color(0.35f, 0.33f, 0.3f), ca, spin);
+                    DrawFxRect(Texture2D.whiteTexture, at, cw * 0.18f, ch * 0.92f, new Color(0.65f, 0.58f, 0.45f), ca, spin);
+                    DrawFxRect(Texture2D.whiteTexture, at, cw * 1.05f, ch * 0.1f, new Color(0.55f, 0.5f, 0.4f), ca, spin);
+                    if (age > FxCasePlant && age < FxCasePlant + 0.35f)      // 내려박는 충격 · 갈라진 바닥
+                    {
+                        float q = (age - FxCasePlant) / 0.35f;
+                        Vector2 ground = planted + new Vector2(0f, ch * 0.5f);
+                        DrawFxRect(fxRing, ground, unit * (1f + 3.5f * Ease(q)), unit * (0.35f + 1.2f * Ease(q)), light, 1f - q);
+                        for (int k = -2; k <= 2; k++)
+                            if (k != 0) DrawFxRect(fxLine, ground + new Vector2(k * unit * 0.42f, Mathf.Abs(k) * unit * 0.07f), unit * 0.7f, unit * 0.1f, Color.white, 1f - q, k * 14f);
+                    }
+                    if (age < FxCasePlant) break;
+
+                    Vector2 muzzle = planted + new Vector2(0f, -ch * 0.55f);
+                    // 상승 높이: 발사구 위 MissileRiseHeight 칸 (사용자 2026-11-27: 낮추기). 필드 밖으로는 안 나간다.
+                    float apexY = Mathf.Max(field.y + unit * 0.45f, muzzle.y - unit * MissileRiseHeight);
+                    float fireAge = age - FxCasePlant;
                     for (int k = 0; k < e.Points.Length; k++)
                     {
-                        float s = age - k * FxMissileGap;
+                        float s = fireAge - k * FxMissileGap;
                         if (s < 0f) continue;
-                        Vector2 apex = new Vector2(Mathf.Clamp(caseAt.x + (k - (e.Points.Length - 1) * 0.5f) * unit * 0.45f, field.x + unit * 0.5f, field.xMax - unit * 0.5f),
-                                                   Mathf.Max(topY, caseAt.y - unit * (3.2f + Hash(e.Start, k) * 1.6f)));
+                        // 발사관 위치에서 곧게 위로
+                        Vector2 mouth = muzzle + new Vector2((k % 3 - 1) * unit * 0.14f, 0f);
+                        Vector2 apex = new Vector2(mouth.x, Mathf.Min(apexY, mouth.y - unit * 0.5f));
                         Vector2 hit = P(e.Points[k]) + new Vector2((Hash(e.Start, k + 3) - 0.5f) * unit, (Hash(e.Start, k + 9) - 0.5f) * unit * 0.6f);
                         if (s < FxMissileRise)
                         {
                             float f = Ease(s / FxMissileRise);
-                            Vector2 pos = Vector2.Lerp(caseAt, apex, f);
-                            DrawLine(Vector2.Lerp(caseAt, apex, Mathf.Max(0f, f - 0.35f)), pos, unit * 0.22f, main, 0.7f);
-                            DrawFx(fxDisc, pos, unit * 0.45f, Color.white, 1f);
+                            Vector2 pos = Vector2.Lerp(mouth, apex, f);
+                            DrawLine(Vector2.Lerp(mouth, apex, Mathf.Max(0f, f - 0.45f)), pos, unit * 0.24f, main, 0.8f);
+                            DrawFxRect(Texture2D.whiteTexture, pos, unit * 0.16f, unit * 0.42f, Color.white, 1f);
+                            if (f < 0.25f) DrawFx(fxDisc, mouth, unit * 0.9f, main, 1f - f * 4f);     // 발사 섬광
                         }
                         else if (s < FxMissileRise + FxMissileFall)
                         {
                             float f = (s - FxMissileRise) / FxMissileFall;
-                            Vector2 pos = Vector2.Lerp(apex, hit, f * f);
-                            DrawLine(Vector2.Lerp(apex, hit, Mathf.Max(0f, f * f - 0.3f)), pos, unit * 0.22f, main, 0.8f);
+                            // 상승 끝에서 포물선을 그리며 대상에게 떨어진다 (2차 베지어: 조정점은 두 점 가운데 위)
+                            Vector2 ctrl = new Vector2((apex.x + hit.x) * 0.5f,
+                                                       Mathf.Max(field.y + unit * 0.2f, Mathf.Min(apex.y, hit.y) - unit * 1.5f));
+                            float g = f * (0.6f + 0.4f * f);                 // 뒤로 갈수록 빨라진다
+                            Vector2 pos = Arc(apex, ctrl, hit, g);
+                            Vector2 prev = pos;
+                            for (int q = 1; q <= 6; q++)                     // 곡선 꼬리
+                            {
+                                Vector2 tailPoint = Arc(apex, ctrl, hit, Mathf.Max(0f, g - q * 0.05f));
+                                DrawLine(tailPoint, prev, unit * 0.24f * (1f - q * 0.12f), main, 0.85f * (1f - q * 0.13f));
+                                prev = tailPoint;
+                            }
                             DrawFx(fxDisc, pos, unit * 0.45f, light, 1f);
                             DrawFx(fxRing, hit, unit * 0.9f, new Color(1f, 0.3f, 0.2f), 0.5f);
                         }
@@ -307,8 +532,10 @@ namespace TextSlayers
                 case FieldEffectKind.Maw:         // 거대한 이빨 입이 벌어졌다가 삼킨다
                 {
                     float size = U * 3.4f;
-                    float open = t < 0.5f ? Ease(t * 2f) : 1f - Mathf.Clamp01((t - 0.5f) / 0.18f);
-                    float a = t < 0.8f ? 1f : (1f - t) / 0.2f;
+                    float closing = Mathf.Clamp01((age - MawOpen) / MawClose);
+                    float open = age < MawOpen ? Ease(age / MawOpen) : 1f - closing * closing;   // 닫힘은 가속하며 순식간에
+                    float closedFor = age - MawOpen - MawClose;                                   // 닫힌 뒤 지난 시간
+                    float a = closedFor <= MawHold ? 1f : 1f - Mathf.Clamp01((closedFor - MawHold) / MawFade);
                     float gap = size * 0.42f * open + size * 0.06f;
                     var jaw = new Color(0.12f, 0.06f, 0.14f);
                     DrawFx(fxDisc, c, size * 1.5f, main, 0.35f * a);
@@ -317,14 +544,20 @@ namespace TextSlayers
                         Vector2 j = c + new Vector2(0f, side * (gap + size * 0.16f));
                         DrawFxRect(fxDisc, j, size * 1.5f, size * 0.75f, jaw, a);
                         DrawFxRect(Texture2D.whiteTexture, j, size * 0.95f, size * 0.22f, jaw, a);
-                        for (int k = -3; k <= 3; k++)   // 이빨
+                        for (int k = -2; k <= 2; k++)   // 안쪽 이빨
                         {
-                            float tooth = size * (k == -3 || k == 3 ? 0.17f : 0.13f);
+                            float tooth = size * 0.13f;
                             Vector2 tp = c + new Vector2(k * size * 0.145f, side * (gap + Mathf.Abs(k) * size * 0.006f));
                             DrawFxRect(Texture2D.whiteTexture, tp, tooth * 0.7f, tooth * 0.7f, Color.white, a, 45f);
                         }
+                        for (int k = -1; k <= 1; k += 2)   // 가장자리 송곳니: 긴 마름모 (위아래가 살짝 엇갈려 맞물린다)
+                        {
+                            Vector2 tp = c + new Vector2(k * size * 0.435f + side * size * 0.035f, side * (gap + size * 0.02f));
+                            DrawFxRect(Diamond, tp, size * 0.15f, size * 0.46f, Color.white, a);
+                        }
                     }
-                    if (t > 0.68f) DrawFx(fxRing, c, size * 1.8f * (t - 0.4f), light, a);
+                    if (closing >= 1f && closedFor < 0.2f)   // 맞물리는 순간의 충격
+                        DrawFx(fxRing, c, size * (0.8f + closedFor * 6f), light, 1f - closedFor / 0.2f);
                     break;
                 }
                 case FieldEffectKind.ForwardSlashes:  // 전방으로 연속 베기
@@ -382,6 +615,133 @@ namespace TextSlayers
                     }
                     break;
                 }
+                case FieldEffectKind.Afterimage:  // 지나간 자리에 몸 모양 잔상 (뒤쪽일수록 먼저 사라진다)
+                {
+                    Vector2 a = P(e.Origin), z = P(e.End);
+                    float travel = Mathf.Max(0.05f, e.Duration);
+                    float body = FieldConst.Radius * 2f * unit;
+                    for (int k = 0; k < GhostCount; k++)
+                    {
+                        float s = k / (float)GhostCount;
+                        float since = age - travel * s;
+                        if (since < 0f || since > GhostLinger) continue;
+                        float fade = 1f - since / GhostLinger;
+                        Vector2 pos = Vector2.Lerp(a, z, s);
+                        DrawFx(fxDisc, pos, body * 1.9f, main, 0.35f * fade);
+                        DrawFxRect(Texture2D.whiteTexture, pos, body, body, new Color(main.r * 0.6f, main.g * 0.4f, main.b), 0.7f * fade);
+                        DrawFxRect(Texture2D.whiteTexture, pos, body * 0.55f, body * 0.55f, light, 0.45f * fade);
+                    }
+                    if (age < travel)
+                        DrawLine(a, Vector2.Lerp(a, z, age / travel), U * 0.3f, main, 0.7f);
+                    break;
+                }
+                case FieldEffectKind.Thrust:      // 도달 순간 찌르기: 날카로운 창끝이 대상을 꿰뚫는다
+                {
+                    Vector2 dir = e.Dir.sqrMagnitude > 0.001f ? e.Dir.normalized : Vector2.right;
+                    float grow = Ease(Mathf.Clamp01(t / 0.2f));
+                    float a = t < 0.45f ? 1f : (1f - t) / 0.55f;
+                    float ang = AngleOf(dir);
+                    Vector2 tail = c - dir * (U * 2.2f), head = c + dir * (U * 2.6f * grow);
+                    Vector2 mid = (tail + head) * 0.5f;
+                    float len = Vector2.Distance(tail, head);
+                    DrawFxRect(Diamond, mid, len * 1.15f, U * 1.05f, main, 0.6f * a, ang);
+                    DrawFxRect(Diamond, mid, len, U * 0.55f, light, a, ang);
+                    DrawFxRect(Diamond, mid, len * 0.95f, U * 0.2f, Color.white, a, ang);
+                    for (int side = -1; side <= 1; side += 2)      // 옆으로 갈라지는 충격선
+                    {
+                        float sa = ang + side * 32f;
+                        Vector2 d2 = new Vector2(Mathf.Cos(sa * Mathf.Deg2Rad), Mathf.Sin(sa * Mathf.Deg2Rad));
+                        DrawFxRect(Diamond, c + d2 * (U * 1.1f * grow), U * 1.8f * grow, U * 0.2f, light, 0.8f * a, sa);
+                    }
+                    DrawFx(fxRing, c, U * Mathf.Lerp(0.6f, 3.2f, Ease(t)), light, 1f - t);
+                    DrawFx(fxDisc, c, U * 1.4f, Color.white, 0.7f * (1f - Mathf.Clamp01(t * 2.5f)));
+                    break;
+                }
+                case FieldEffectKind.IceShatter:  // 얼음 조각이 대상 뒤쪽 부채꼴로 흩뿌려진다
+                {
+                    Vector2 dir = e.Dir.sqrMagnitude > 0.001f ? e.Dir.normalized : Vector2.right;
+                    float baseAng = AngleOf(dir);
+                    float fly = Ease(t);
+                    float a = 1f - t * t;
+                    for (int k = 0; k < 16; k++)
+                    {
+                        float ang = baseAng + (Hash(e.Start, k) - 0.5f) * 80f;       // 뒤쪽 ±40도
+                        float dist = unit * (0.5f + Hash(e.Start, k + 17) * 2.6f) * fly;
+                        Vector2 d = Polar(ang);
+                        Vector2 pos = c + d * dist + new Vector2(0f, unit * 0.8f * t * t);   // 살짝 가라앉음
+                        float size = unit * (0.16f + Hash(e.Start, k + 41) * 0.28f) * (1f - t * 0.5f);
+                        DrawFxRect(fxLine, pos - d * (size * 1.2f), size * 3f, size * 0.45f, main, 0.55f * a, ang);   // 꼬리
+                        DrawFxRect(Diamond, pos, size * 2.1f, size, k % 3 == 0 ? Color.white : light, a, ang + t * 200f * (k % 2 == 0 ? 1f : -1f));
+                    }
+                    DrawFx(fxDisc, c, U * 1.5f, light, 0.8f * (1f - Mathf.Clamp01(t * 3f)));
+                    DrawFx(fxRing, c, U * Mathf.Lerp(0.5f, 1.8f, fly), main, 0.8f * (1f - t));
+                    break;
+                }
+                case FieldEffectKind.FistSlam:    // 큰 주먹이 원형 궤적을 그리며 위에서 아래로 내려찍는다
+                {
+                    float side = e.Dir.x >= 0f ? 1f : -1f;
+                    float radius = U * 2.1f;
+                    Vector2 center = c + new Vector2(-side * radius, 0f);   // 원의 중심: 찍는 지점의 옆
+                    const float Swing = 0.34f;                              // 전체 중 휘두르는 비율
+                    float k = Mathf.Clamp01(t / Swing);
+                    float ang = Mathf.Lerp(-130f, 0f, k * k);              // 0 = 찍는 지점
+                    Vector2 At(float deg) => center + new Vector2(Mathf.Cos(deg * Mathf.Deg2Rad) * side, Mathf.Sin(deg * Mathf.Deg2Rad)) * radius;
+                    float fade = t < 0.6f ? 1f : (1f - t) / 0.4f;
+
+                    Vector2 prev = At(-130f);                               // 원형 궤적
+                    for (int i = 1; i <= 14; i++)
+                    {
+                        float d = Mathf.Lerp(-130f, ang, i / 14f);
+                        Vector2 p = At(d);
+                        float w = i / 14f;
+                        DrawLine(prev, p, U * 0.85f * w, main, 0.6f * w * fade);
+                        DrawLine(prev, p, U * 0.3f * w, light, 0.95f * w * fade);
+                        prev = p;
+                    }
+                    Vector2 fist = At(ang);
+                    float s = U * 1.15f;
+                    float tilt = ang * side;
+                    DrawFx(fxDisc, fist, s * 1.9f, main, 0.6f * fade);
+                    DrawFxRect(Texture2D.whiteTexture, fist, s * 0.82f, s * 0.78f, light, fade, tilt);                      // 주먹
+                    for (int i = -1; i <= 2; i++)                                                                            // 손가락 마디
+                        DrawFxRect(fxDisc, fist + new Vector2((i - 0.5f) * s * 0.2f, s * 0.4f), s * 0.3f, s * 0.3f, Color.white, fade);
+                    DrawFxRect(Texture2D.whiteTexture, fist + new Vector2(-side * s * 0.36f, 0f), s * 0.24f, s * 0.5f, main, fade, tilt);   // 엄지
+
+                    if (k >= 1f)                                            // 착탄: 충격 고리 · 바닥 균열
+                    {
+                        float q = (t - Swing) / (1f - Swing);
+                        DrawFx(fxDisc, c, U * 3f * Mathf.Lerp(0.5f, 1.1f, Ease(q)), Color.white, 0.75f * (1f - Mathf.Clamp01(q * 2.5f)));
+                        DrawFxRect(fxRing, c, U * (1.5f + 4.5f * Ease(q)), U * (0.8f + 2.4f * Ease(q)), light, 1f - q);
+                        DrawFxRect(fxRing, c, U * (1f + 3f * Ease(q)), U * (0.55f + 1.6f * Ease(q)), main, 1f - q);
+                        for (int i = 0; i < 9; i++)
+                        {
+                            float a = i * 40f + Hash(e.Start, i) * 25f;
+                            Vector2 d = Polar(a);
+                            float len = U * (1f + Hash(e.Start, i + 11) * 1.4f) * Ease(Mathf.Min(1f, q * 4f));
+                            DrawLine(c + d * (U * 0.4f), c + new Vector2(d.x, d.y * 0.6f) * (U * 0.4f + len), U * 0.16f, Color.white, 1f - q);
+                        }
+                    }
+                    break;
+                }
+                case FieldEffectKind.SwordRaise:  // 대검을 머리 위로 들어 준비
+                {
+                    float up = Ease(Mathf.Clamp01(t * 2.5f));
+                    float side = e.Dir.x >= 0f ? 1f : -1f;
+                    float ang = -90f - side * Mathf.Lerp(-100f, 14f, up);
+                    float shake = t > 0.5f ? Mathf.Sin(age * 55f) * 1.2f : 0f;
+                    Vector2 hand = follow + new Vector2(shake, -U * Mathf.Lerp(0f, 0.55f, up));
+                    DrawGreatSword(hand, ang, U, 1f);
+                    if (t > 0.6f) DrawFx(fxDisc, hand + Polar(ang) * (U * 2.7f), U * (0.5f + 0.5f * Mathf.Sin(age * 20f)), Color.white, 0.9f);   // 칼끝 빛
+                    break;
+                }
+                case FieldEffectKind.SwordCut:    // 들어 올린 대검을 앞으로 내려벤다
+                {
+                    float a = t < 0.7f ? 1f : (1f - t) / 0.3f;
+                    DrawGreatSword(follow, SkyCutAngle(e.Dir, age), U, a);
+                    break;
+                }
+                case FieldEffectKind.WhiteSlash:  // 바닥 잔흔: 유닛 아래에 그린다 (DrawGroundEffects)
+                    break;
                 case FieldEffectKind.LeapOff:     // 위로 솟구쳐 맵을 벗어남
                 {
                     float rise = Ease(t);
