@@ -135,3 +135,57 @@ export function darkPillar() {
 export const spin = () => reap("stiumSpin", { cx: 0, cy: -28, R: 108, a0: -1.5708, span: Math.PI * 2, W: 36, wind: 0.02, sweep: 0.28, hang: 0.08, tear: 0.34, linear: true });
 // 강격검: 위(-100°)에서 앞(+25°)으로 빠르게 내려찍기
 export const smashArc = () => reap("stiumSmash", { cx: 0, cy: -28, R: 112, a0: -1.745, span: 2.182, W: 42, wind: 0, sweep: 0.09, hang: 0.18, tear: 0.38 });
+
+// ───────── 어둠 거두기 (life-steal 의 알갱이를 보라색으로) ─────────
+const STEAL = ["#14081f", "#2a0f4a", "#4a1d7a", "#6e2fb0", "#9a52e0", "#c48cff", "#e6c8ff", "#ffffff"];
+
+// 날아가는 알갱이: 오른쪽을 향한 머리 + 왼쪽으로 가늘어지는 꼬리 (반복)
+export function stealOrb() {
+  const D = 0.2;
+  return make("stealOrb", { size: [72, 32], origin: [56, 16], duration: D, fps: 20, loop: true }, () => {
+    const C = fit(STEAL, 8);
+    let t = 0;
+    return {
+      update(dt) { t += dt; },
+      draw(p) {
+        const pulse = 0.85 + 0.15 * Math.sin((t / D) * Math.PI * 2);
+        for (let i = 30; i >= 1; i--) {
+          const u = i / 30, col = u < 0.15 ? C[7] : u < 0.35 ? C[6] : u < 0.6 ? C[5] : u < 0.8 ? C[4] : C[2];
+          p.line(-i - 1, 0, -i, 0, col);
+          if (i < 9) p.disc(-i, 0, 2.6 * (1 - i / 9), u < 0.12 ? C[6] : C[5], 0.8);
+        }
+        p.circle(0, 0, 3.2, C[4]);
+        p.circle(0, 0, 2.3 * pulse, C[6]);
+        p.px(-0.5, -0.5, WHITE);
+        p.glow(0, 0, 10, C[5], 0.55);
+      },
+    };
+  });
+}
+
+// 대상에서 알갱이가 뜯겨 나올 때 / 시전자가 빨아들였을 때의 번쩍임
+function stealPop(id, rise) {
+  return make(id, { size: [72, 72], origin: [36, 36], duration: 0.5, fps: 24 }, () => {
+    const C = fit(STEAL, 8), R = new Rng(rise ? 9 : 4), ps = new Particles({ rng: R, ground: () => 1000, sparks: [WHITE, C[7], C[6], C[5]] });
+    for (let i = 0; i < 14; i++) {
+      const a = R.range(0, Math.PI * 2), sp = R.range(50, 130);
+      ps.spawn(P.SPARK, 0, 0, Math.cos(a) * sp, Math.sin(a) * sp, R.range(0.15, 0.35));
+    }
+    if (rise) for (let i = 0; i < 8; i++) ps.spawn(P.EMBER, R.range(-9, 9), R.range(-6, 14), R.range(-10, 10), -R.range(15, 40), R.range(0.3, 0.5), C[6]);
+    let t = 0;
+    return {
+      update(dt) { t += dt; ps.update(dt); },
+      draw(p) {
+        const k = clamp(t / 0.3);
+        if (k < 1) {
+          p.ring(0, 0, 4 + 16 * ease.outCubic(k), Math.max(1, 2 * (1 - k)), k < 0.4 ? C[7] : C[5]);
+          p.glow(0, 0, 28, C[5], 0.6 * (1 - k));
+        }
+        if (t < 0.12) sparkle(p, 0, 0, 10 * (1 - t / 0.12), C[7], C[5], 0.6);
+        ps.draw(p);
+      },
+    };
+  });
+}
+export const stealStart = () => stealPop("stealStart", false);
+export const stealFeed = () => stealPop("stealFeed", true);

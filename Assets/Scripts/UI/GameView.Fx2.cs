@@ -38,6 +38,7 @@ namespace TextSlayers
             {
                 case FieldEffectKind.BladeSlam when IsStium(e) && e.Target != null:
                     return Mathf.Max(e.Duration, SmashSlamStart(e) + SheetTime("stiumSmash"));
+                case FieldEffectKind.Freeze when IsAbsoluteZero(e): return Mathf.Max(e.Duration, DebrisTime);
                 case FieldEffectKind.BigSlash: return FxBigSlash;
                 case FieldEffectKind.Coin: return FxCoin;
                 case FieldEffectKind.SlantPillar: return FxSlantPillar;
@@ -51,7 +52,7 @@ namespace TextSlayers
                 case FieldEffectKind.FistSlam: return FistSwingTime + SheetTime("slam");
                 case FieldEffectKind.SwordCut: return 0.4f;
                 case FieldEffectKind.WhiteSlash: return 0.65f;
-                case FieldEffectKind.IceShatter: return SheetTime("iceShatter");
+                case FieldEffectKind.IceShatter: return SheetTime("iceFall");
                 case FieldEffectKind.BladeSwing: return FxBladeSwing;
                 case FieldEffectKind.Missiles: return FxCasePlant + Mathf.Max(1, e.Count) * FxMissileGap + FxMissileRise + FxMissileFall + Mathf.Max(FxMissileBoom, SheetTime("boom"));
                 case FieldEffectKind.CrossFall: return e.Duration + FxCrossFallAfter;
@@ -122,6 +123,17 @@ namespace TextSlayers
             EnsureFx();
             foreach (var e in b.Effects)
             {
+                if (e.Kind == FieldEffectKind.Grasp && IsStium(e))
+                {
+                    Vector2 at = e.Source.Alive ? e.Source.Pos : e.Origin;
+                    DrawStiumGrasp(new Vector2(field.x + at.x * unit, field.y + at.y * unit), unit, b.Time - e.Start - e.Delay);
+                    continue;
+                }
+                if (IsAbsoluteZero(e))
+                {
+                    DrawIceDebris(field, unit, e, b.Time - e.Start - e.Delay);
+                    continue;
+                }
                 if (e.Kind != FieldEffectKind.WhiteSlash) continue;
                 float age = b.Time - e.Start - e.Delay;
                 float len = SpecialLength(e);
@@ -345,14 +357,19 @@ namespace TextSlayers
                 }
                 case FieldEffectKind.Freeze:      // 필드가 얼고 적들이 얼음에 갇힌 듯한 연출
                 {
-                    float a = Mathf.Min(1f, age / 0.15f) * Mathf.Min(1f, (1f - t) * 2.5f);
+                    float own = e.Duration > 0f ? e.Duration : FxDefaultHold;      // 얼어 있는 시간 (잔해는 더 남는다)
+                    float a = Mathf.Min(1f, age / 0.15f) * Mathf.Clamp01((1f - age / own) * 2.5f);
                     DrawFxRect(Texture2D.whiteTexture, field.center, field.width, field.height, new Color(0.55f, 0.85f, 1f), 0.22f * a);
-                    DrawSheet("frostNova", Feet(follow, unit), unit, age, Color.white);
                     for (int k = 0; k < 24; k++)  // 바닥 서리
                     {
                         Vector2 pos = new Vector2(field.x + Hash(e.Start, k) * field.width, field.y + Hash(e.Start, k + 40) * field.height);
                         DrawFxRect(fxLine, pos, unit * 1.2f, unit * 0.12f, Color.white, 0.5f * a, Hash(e.Start, k + 80) * 180f);
                         DrawFxRect(fxLine, pos, unit * 0.8f, unit * 0.1f, Color.white, 0.4f * a, Hash(e.Start, k + 80) * 180f + 60f);
+                    }
+                    if (IsAbsoluteZero(e))       // 적의 몸에 얼음 조각
+                    {
+                        DrawIceStuck(e, unit, age, Mathf.Clamp01((own - age) / 0.3f), P);
+                        break;
                     }
                     if (e.Units == null) break;
                     foreach (var u in e.Units)
@@ -417,42 +434,13 @@ namespace TextSlayers
                     float fireAge = age - FxCasePlant;
                     for (int k = 0; k < e.Points.Length; k++)
                     {
-                        float s = fireAge - k * FxMissileGap;
-                        if (s < 0f) continue;
+                        float since = fireAge - k * FxMissileGap;
+                        if (since < 0f) continue;
                         // 발사관 위치에서 곧게 위로
                         Vector2 mouth = muzzle + new Vector2((k % 3 - 1) * unit * 0.14f, 0f);
                         Vector2 apex = new Vector2(mouth.x, Mathf.Min(apexY, mouth.y - unit * 0.5f));
-                        Vector2 hit = P(e.Points[k]) + new Vector2((Hash(e.Start, k + 3) - 0.5f) * unit, (Hash(e.Start, k + 9) - 0.5f) * unit * 0.6f);
-                        if (s < FxMissileRise)
-                        {
-                            float f = Ease(s / FxMissileRise);
-                            Vector2 pos = Vector2.Lerp(mouth, apex, f);
-                            DrawLine(Vector2.Lerp(mouth, apex, Mathf.Max(0f, f - 0.45f)), pos, unit * 0.24f, main, 0.8f);
-                            DrawFxRect(Texture2D.whiteTexture, pos, unit * 0.16f, unit * 0.42f, Color.white, 1f);
-                            if (f < 0.25f) DrawFx(fxDisc, mouth, unit * 0.9f, main, 1f - f * 4f);     // 발사 섬광
-                        }
-                        else if (s < FxMissileRise + FxMissileFall)
-                        {
-                            float f = (s - FxMissileRise) / FxMissileFall;
-                            // 상승 끝에서 포물선을 그리며 대상에게 떨어진다 (2차 베지어: 조정점은 두 점 가운데 위)
-                            Vector2 ctrl = new Vector2((apex.x + hit.x) * 0.5f,
-                                                       Mathf.Max(field.y + unit * 0.2f, Mathf.Min(apex.y, hit.y) - unit * 1.5f));
-                            float g = f * (0.6f + 0.4f * f);                 // 뒤로 갈수록 빨라진다
-                            Vector2 pos = Arc(apex, ctrl, hit, g);
-                            Vector2 prev = pos;
-                            for (int q = 1; q <= 6; q++)                     // 곡선 꼬리
-                            {
-                                Vector2 tailPoint = Arc(apex, ctrl, hit, Mathf.Max(0f, g - q * 0.05f));
-                                DrawLine(tailPoint, prev, unit * 0.24f * (1f - q * 0.12f), main, 0.85f * (1f - q * 0.13f));
-                                prev = tailPoint;
-                            }
-                            DrawFx(fxDisc, pos, unit * 0.45f, light, 1f);
-                            DrawFx(fxRing, hit, unit * 0.9f, new Color(1f, 0.3f, 0.2f), 0.5f);
-                        }
-                        else if (s < FxMissileRise + FxMissileFall + boomLength)
-                        {
-                            DrawSheet("boom", Feet(hit, unit), unit, s - FxMissileRise - FxMissileFall, Color.white);
-                        }
+                        Vector2 hit = MissileTarget(e, k, since >= FxMissileRise + FxMissileFall, P);
+                        DrawMissile(field, unit, since, mouth, apex, hit, main, light);
                     }
                     break;
                 }
@@ -665,8 +653,8 @@ namespace TextSlayers
                     DrawFx(fxDisc, c, U * 1.4f, Color.white, 0.7f * (1f - Mathf.Clamp01(t * 2.5f)));
                     break;
                 }
-                case FieldEffectKind.IceShatter:  // 얼음 조각이 대상 뒤(탄 진행 방향)로 흩뿌려진다
-                    DrawSheet("iceShatter", Feet(c, unit), unit, age, Color.white, e.Dir.x < 0f);
+                case FieldEffectKind.IceShatter:  // 얼음이 대상 뒤(탄 진행 방향)로 쏟아져 떨어지며 사라진다
+                    DrawSheet("iceFall", c, unit, age, Color.white, e.Dir.x < 0f);
                     break;
                 case FieldEffectKind.FistSlam:    // 큰 주먹이 원형 궤적을 그리며 위에서 아래로 내려찍는다
                 {

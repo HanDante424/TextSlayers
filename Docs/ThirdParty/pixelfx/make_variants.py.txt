@@ -1,0 +1,57 @@
+import io
+base = "pixelfx/src/fx/"
+
+def derive(src, dst, pairs):
+    s = io.open(base + src, encoding="utf-8").read().replace("\r\n", "\n")
+    for a, b, *n in pairs:
+        want = n[0] if n else 1
+        assert s.count(a) == want, (src, s.count(a), a)
+        s = s.replace(a, b)
+    io.open(base + dst, "w", encoding="utf-8", newline="").write(s)
+
+# 어둠의 손아귀: implosion, 반지름 1.6배, 보라, 끝의 하얀 밝아짐 제거 (모이는 구간만 사용)
+derive("explosions/implosion.js", "explosions/stium-implosion.js", [
+    ("size: [208, 184],\n  origin: [104, 92],", "size: [248, 248],\n  origin: [124, 124],"),
+    ('options: { palette: ["#0a0614", "#1c1236", "#3a2470", "#6a44c0", "#a080f0", "#d8c8ff", "#ffffff"], seed: 2 },',
+     'options: { palette: ["#07040c", "#1a0b33", "#3b1a66", "#5f2c9c", "#8a46d0", "#b478ee", "#d9b8ff"], seed: 2 },'),
+    ("const SUCK = 0.8, STILL = 1.02, VOID", "const S = 1.6, SUCK = 0.8, STILL = 1.02, VOID"),
+    ("Array.from({ length: 70 }", "Array.from({ length: 150 }"),
+    ("d: R.range(40, 86)", "d: R.range(40, 76) * S"),
+    ("for (let n = 0; n < 1 + Math.floor(k * 4); n++)", "for (let n = 0; n < 3 + Math.floor(k * 7); n++)"),
+    ("D = R.range(34, 82) * (1 - 0.3 * k)", "D = R.range(34, 74) * S * (1 - 0.3 * k)"),
+    ("D = R.range(50, 80);", "D = R.range(50, 72) * S;"),
+    ("-Math.cos(a) * 90, -Math.sin(a) * 90", "-Math.cos(a) * 140, -Math.sin(a) * 140"),
+    ("const vr = 64 * (1 - ease.inCubic(k)) + 3;", "const vr = 64 * S * (1 - ease.inCubic(k)) + 3;"),
+    ("const r = (70 - i * 8) * (1 - ease.inQuad(u)) + 2;", "const r = (70 - i * 8) * S * (1 - ease.inQuad(u)) + 2;"),
+    # 가운데의 하얀 점과 밝아지는 빛 제거
+    ("p.circle(jit, 0, cr, WHITE);", "p.circle(jit, 0, cr, C[3]);"),
+    ("p.glow(0, 0, 10 + 26 * k, C[4], 0.3 + 0.5 * k);", "p.glow(0, 0, 10 + 14 * k, C[3], 0.25);"),
+])
+
+# 어둠의 파동: dark-explosion 에서 가운데 검은 구만 제거
+derive("shadow/dark-explosion.js", "shadow/stium-pulse.js", [
+    ("function sphere(p, C, r, t, heat) {\n  if (r < 0.6) return;", "function sphere(p, C, r, t, heat) {\n  return; // 가운데 구형 이펙트 제거"),
+    ("      if (released && t < BURN) {\n", "      if (released && t < BURN && false) { // 구에서 나오는 불길 제거\n"),
+    ("      if (sr > 1) {\n        halo(", "      if (false) {\n        halo("),
+    ("      if (B0 > 2) unlight(", "      if (false) unlight("),
+    ("        halo(p, 0, Y, cr, cr + 14 + 30 * q, C[5], (0.45 + 0.7 * q) * beat);\n", ""),
+    ("        if (t > REL - 0.07) p.circle(0, Y, 1.6, WHITE);\n        else sphere(p, C, cr, t, 0.3 + 0.3 * q);\n", ""),
+    ("cut = Math.max(fr, sr);", "cut = fr;"),
+    # 바닥 표기 제거 (사용자 2026-11-27): 바닥 고리 · 먼지 · 연기 · 빛, 바닥에서 잘리던 공중 고리는 온전한 원으로
+    ("size: [280, 248],", "size: [280, 310],"),
+    ("R = new Rng(o.seed), floor = () => 0;", "R = new Rng(o.seed), floor = () => 1000;"),
+    ("for (let i = 0; i < 12; i++) {\n      const s = i % 2 ? 1 : -1;", "for (let i = 0; i < 0; i++) {\n      const s = i % 2 ? 1 : -1;"),
+    ("        if (rf > 0)\n", "        if (false)\n"),
+    ("      for (const r of rings) floorRing(p, C, r, true);\n", ""),
+    ("      for (const r of rings) floorRing(p, C, r, false);\n", ""),
+    ("      if (k > 0) p.glow(0, -3, 74, C[4], 0.24 * Math.min(1, k) * flick);\n", ""),
+    ("(v, g) => (Y + Math.sin(g) * rr > 0.5 ? 0 : Math.min(1, q * 1.6)));", "(v, g) => Math.min(1, q * 1.6));"),
+    ("(x, y) => y < 0.5);", "(x, y) => true);"),
+    # 파편은 중력 없이 전방향으로 (사용자 2026-11-27)
+    ("vy: Math.sin(a) * sp - R.range(40, 110), g: 0.75,", "vy: Math.sin(a) * sp, g: 0,"),
+    ("      ps.spawn(P.SPARK, x, y, Math.cos(a) * sp, Math.sin(a) * sp - 50, R.range(0.2, 0.7));",
+     "      ps.spawn(P.MOTE, x, y, Math.cos(a) * sp, Math.sin(a) * sp, R.range(0.25, 0.75), R.chance(0.5) ? C[7] : C[6], R.range(0.8, 1.3));"),
+    ("      embers.spawn(P.EMBER, x, y, Math.cos(a) * sp, Math.sin(a) * sp - 40, R.range(1.3, 2.5));",
+     "      embers.spawn(P.MOTE, x, y, Math.cos(a) * sp * 0.7, Math.sin(a) * sp * 0.7, R.range(0.6, 1.2), C[5], 0.9);"),
+])
+print("ok")

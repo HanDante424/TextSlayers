@@ -24,6 +24,22 @@ namespace TextSlayers
             { "darkWave", new FxSheet("darkWave", 6, 3, 61, 80, 44, 40, 20f) },   // stium_fx
             { "waveDust", new FxSheet("waveDust", 10, 5, 23, 39, 11, 21, 18f) },   // stium_fx
             { "darkPillar", new FxSheet("darkPillar", 20, 9, 32, 114, 16, 102, 24f) },   // stium_fx
+            { "grasp", new FxSheet("grasp", 23, 5, 243, 239, 122, 121, 42f) },   // explosions/stium-implosion
+            { "darkPulse", new FxSheet("darkPulse", 31, 6, 247, 247, 124, 178, 24f) },   // shadow/stium-pulse
+            { "stealOrb", new FxSheet("stealOrb", 4, 2, 37, 12, 31, 6, 20f) },   // stium_fx
+            { "stealStart", new FxSheet("stealStart", 11, 4, 40, 53, 20, 20, 24f) },   // stium_fx
+            { "stealFeed", new FxSheet("stealFeed", 12, 4, 43, 46, 23, 20, 24f) },   // stium_fx
+            { "airBoom", new FxSheet("airBoom", 23, 5, 99, 99, 49, 49, 24f) },   // stium_fx
+            { "iceFall", new FxSheet("iceFall", 25, 7, 125, 191, 39, 39, 24f) },   // stium_fx
+            { "airBoomBig", new FxSheet("airBoomBig", 25, 6, 183, 203, 93, 99, 22f) },   // stium_fx
+            { "pileImpact", new FxSheet("pileImpact", 23, 5, 151, 136, 46, 51, 30f) },   // stium_fx
+            { "thrust", new FxSheet("thrust", 11, 4, 27, 30, 14, 17, 20f) },   // stium_fx
+            { "iceSpray", new FxSheet("iceSpray", 11, 4, 75, 66, 20, 36, 24f) },   // stium_fx
+            { "iceDebris", new FxSheet("iceDebris", 31, 5, 47, 34, 25, 26, 12f) },   // stium_fx
+            { "iceDebrisB", new FxSheet("iceDebrisB", 31, 5, 42, 33, 21, 25, 12f) },   // stium_fx
+            { "iceStuck", new FxSheet("iceStuck", 10, 4, 35, 49, 18, 25, 10f) },   // stium_fx
+            { "lightning", new FxSheet("lightning", 23, 6, 211, 258, 105, 227, 24f) },   // lightning/lightning-strike
+            { "shieldBig", new FxSheet("shieldBig", 24, 5, 106, 100, 53, 50, 10f) },   // holy/divine-shield-big
             { "darkSlam", new FxSheet("darkSlam", 22, 4, 206, 140, 100, 101, 18f) },   // impacts/ground-slam
         };
     }
