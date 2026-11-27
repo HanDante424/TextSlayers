@@ -1,0 +1,160 @@
+// 벤데타 전용 이펙트 (pixelfx core 로 만든 것). 좌표는 도트 단위, 오른쪽 방향.
+import { Particles, P, PF, Rng, fit, sparkle, clamp, ease, WHITE, hex } from "./pixelfx/src/core/index.js";
+
+const make = (id, meta, create) => {
+  const m = { name: id, loop: false, options: {}, ...meta };
+  return { id: "custom/" + id, meta: m, mod: { meta: m, create } };
+};
+const FIRE = ["#4a1712", "#c9281f", "#f2561d", "#ff8a2a", "#ffc23d", "#ffe26b", "#fff3a6", "#ffffff"];
+const ICE = ["#151a3d", "#212f6b", "#2c58aa", "#3a8bd8", "#62c8f4", "#a6ecff", "#dcfbff", "#ffffff"];
+
+// 작열탄 · 벙커버스터: 바닥 없이 공중에서 터지는 폭발. k = 크기 배율
+export function airBoom(k = 1, id = "airBoom") {
+  const side = Math.round(150 * k), D = k > 1 ? 1.2 : 1.0;
+  return make(id, { size: [side, side], origin: [side >> 1, side >> 1], duration: D, fps: 24 }, () => {
+    const C = fit(FIRE, 8), R = new Rng(21), ps = new Particles({ rng: R, ground: () => 1000, sparks: [WHITE, C[6], C[5], C[3]] });
+    for (let i = 0; i < Math.round(18 * k * k); i++) {
+      const a = R.range(0, Math.PI * 2), sp = R.range(10, 85) * k;
+      ps.spawn(P.FIRE, Math.cos(a) * 5 * k, Math.sin(a) * 5 * k, Math.cos(a) * sp, Math.sin(a) * sp, R.range(0.2, 0.45) * (k > 1 ? 1.35 : 1), 0, R.range(5, 9) * Math.sqrt(k), 0, R.chance(0.6) ? PF.SMOKES | (k > 1 ? PF.BIG : 0) : 0);
+    }
+    for (let i = 0; i < Math.round(34 * k); i++) {
+      const a = R.range(0, Math.PI * 2), sp = R.range(80, 190) * k;
+      ps.spawn(P.MOTE, 0, 0, Math.cos(a) * sp, Math.sin(a) * sp, R.range(0.18, 0.45), R.chance(0.5) ? C[5] : C[4], R.range(0.8, 1.4));
+    }
+    let t = 0;
+    return {
+      update(dt) { t += dt; ps.update(dt); },
+      draw(p) {
+        const q = clamp(t / (0.22 * Math.sqrt(k)));
+        if (t < 0.07) p.circle(0, 0, (15 * (1 - t / 0.07) + 4) * k, WHITE);
+        if (q < 1) {
+          p.ring(0, 0, (6 + 44 * ease.outCubic(q)) * k, Math.max(1, 3 * k * (1 - q)), q < 0.35 ? C[6] : C[4], 1.1 - q);
+          if (k > 1) p.ring(0, 0, (4 + 28 * ease.outCubic(q)) * k, Math.max(1, 2 * (1 - q)), C[5], 0.9 - q);
+          p.glow(0, 0, 60 * k, C[4], 0.7 * (1 - q));
+        }
+        if (t < 0.15) sparkle(p, 0, 0, 24 * k * (1 - t / 0.15), C[7], C[5], 0.6);
+        ps.draw(p);
+      },
+    };
+  });
+}
+
+// 빙결탄: 앞으로 쏟아진 얼음 조각이 아래로 떨어지며 점점 사라진다 (바닥에 남지 않음)
+export function iceFall() {
+  const D = 1.05;
+  return make("iceFall", { size: [230, 220], origin: [55, 65], duration: D, fps: 24 }, () => {
+    const C = fit(ICE, 8), R = new Rng(8), ps = new Particles({ rng: R, ground: () => 1000 });
+    const shards = Array.from({ length: 34 }, () => {
+      const a = R.range(-0.75, 0.55), sp = R.range(40, 150);
+      return { x: R.range(-3, 3), y: R.range(-6, 6), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, ang: R.range(0, 6.28), va: R.range(-12, 12), len: R.range(7, 15), c: R.pick([C[4], C[5], C[6], C[7]]) };
+    });
+    for (let i = 0; i < 26; i++) {
+      const a = R.range(-1.0, 0.8), sp = R.range(20, 120);
+      ps.spawn(P.STAR, 0, 0, Math.cos(a) * sp, Math.sin(a) * sp + R.range(0, 30), R.range(0.3, 0.8), R.chance(0.5) ? C[6] : C[5], R.range(0.6, 1.4));
+    }
+    let t = 0;
+    return {
+      update(dt) {
+        t += dt;
+        for (const q of shards) {
+          q.vy += 230 * dt;
+          q.vx -= q.vx * 1.1 * dt;
+          q.x += q.vx * dt;
+          q.y += q.vy * dt;
+          q.ang += q.va * dt;
+        }
+        ps.update(dt);
+      },
+      draw(p) {
+        const a = 1 - clamp((t - 0.5) / (D - 0.55));
+        if (t < 0.15) {
+          p.glow(0, 0, 52, C[5], 1 - t / 0.15);
+          sparkle(p, 0, 0, 24 * (1 - t / 0.15), C[7], C[5], 0.6);
+          p.ring(0, 0, 6 + 140 * t, 2, C[6], 1 - t / 0.15);
+        }
+        if (a > 0)
+          for (const q of shards) {
+            // 마름모 조각: 길이축을 따라 채우고, 밝은 테두리와 흰 심
+            const ux = Math.cos(q.ang), uy = Math.sin(q.ang), half = q.len * 0.5, wide = q.len * 0.26;
+            for (let d = -half; d <= half; d += 0.6) {
+              const w = wide * (1 - Math.abs(d) / half);
+              for (let o = -w; o <= w; o += 0.6) {
+                const edge = w - Math.abs(o) < 0.7;
+                p.dot(q.x + ux * d - uy * o, q.y + uy * d + ux * o, edge ? C[6] : o < 0 ? C[4] : C[3], a);
+              }
+            }
+            p.line(q.x - ux * half * 0.6, q.y - uy * half * 0.6, q.x + ux * half * 0.6, q.y + uy * half * 0.6, C[7], a);
+            if (q.len > 10) p.glow(q.x, q.y, 9, C[4], 0.3 * a);
+          }
+        ps.draw(p);
+      },
+    };
+  });
+}
+
+// 미사일 뒤에 남는 추진 연기와 불씨 (한 지점)
+export function thrust() {
+  return make("thrust", { size: [56, 56], origin: [28, 30], duration: 0.55, fps: 20 }, () => {
+    const C = fit(FIRE, 8), R = new Rng(3), ps = new Particles({ rng: R, ground: () => 1000 });
+    for (let i = 0; i < 9; i++) ps.spawn(P.SMOKE, R.range(-4, 4), R.range(-4, 4), R.range(-10, 10), R.range(-10, 4), R.range(0.36, 0.55), R.pick([hex("#a8a0ae"), hex("#837b8c"), hex("#5f5868")]), R.range(5, 8));
+    for (let i = 0; i < 10; i++) ps.spawn(P.STAR, R.range(-6, 6), R.range(-6, 6), R.range(-22, 22), R.range(-14, 26), R.range(0.18, 0.5), R.pick([C[5], C[4], C[3]]), R.range(0.6, 1.4));
+    let t = 0;
+    return {
+      update(dt) { t += dt; ps.update(dt); },
+      draw(p) {
+        if (t < 0.12) {
+          p.circle(0, 0, 3.5 * (1 - t / 0.12) + 1, C[5]);
+          p.glow(0, 0, 11, C[4], 0.7 * (1 - t / 0.12));
+        }
+        ps.draw(p);
+      },
+    };
+  });
+}
+
+// 파일벙커: 말뚝이 박히며 앞으로 터져 나가는 물리 충격 (오른쪽 방향)
+export function pileImpact() {
+  const D = 0.75, IRON = ["#1c1a24", "#3a3646", "#605a70", "#8a8498", "#b8b4c4", "#e4e2ec", "#fff2c0", "#ffffff"];
+  return make("pileImpact", { size: [230, 170], origin: [60, 85], duration: D, fps: 30 }, () => {
+    const C = fit(IRON, 8), R = new Rng(17), ps = new Particles({ rng: R, ground: () => 1000, sparks: [WHITE, hex("#ffe9a0"), hex("#ffb347"), hex("#c9762a")] });
+    for (let i = 0; i < 46; i++) {                       // 앞으로 뿜어지는 불똥
+      const a = R.range(-0.6, 0.6), sp = R.range(180, 440);
+      ps.spawn(P.SPARK, 4, R.range(-4, 4), Math.cos(a) * sp, Math.sin(a) * sp - 20, R.range(0.12, 0.4));
+    }
+    for (let i = 0; i < 30; i++) {                       // 터져 나간 파편
+      const a = R.range(-0.85, 0.85), sp = R.range(80, 260);
+      ps.spawn(P.GRIT, R.range(0, 8), R.range(-5, 5), Math.cos(a) * sp, Math.sin(a) * sp, R.range(0.3, 0.7), R.pick([C[2], C[3], C[4]]), R.chance(0.45) ? 2 : 1);
+    }
+    for (let i = 0; i < 9; i++) ps.spawn(P.SMOKE, R.range(-4, 10), R.range(-8, 8), R.range(20, 110), R.range(-30, 20), R.range(0.35, 0.65), R.pick([C[3], C[2]]), R.range(4, 8));
+    const rays = Array.from({ length: 11 }, (_, i) => ({ a: -0.75 + i * 0.15 + R.range(-0.05, 0.05), len: R.range(40, 100) }));
+    let t = 0;
+    return {
+      update(dt) { t += dt; ps.update(dt); },
+      draw(p) {
+        if (t < 0.08) {
+          p.circle(0, 0, 20 * (1 - t / 0.08) + 6, WHITE);
+          p.glow(0, 0, 60, C[6], 1);
+        }
+        if (t < 0.18) {                                  // 앞으로 뻗는 충격선
+          const q = t / 0.18;
+          for (const r of rays) {
+            const from = 6 + r.len * ease.outCubic(q) * 0.7, to = 12 + r.len * ease.outCubic(clamp(q * 1.6));
+            p.line(Math.cos(r.a) * from, Math.sin(r.a) * from, Math.cos(r.a) * to, Math.sin(r.a) * to, q < 0.5 ? WHITE : C[5], 1 - q * 0.6);
+          }
+        }
+        for (let n = 0; n < 3; n++) {                    // 압축 고리: 세로로 긴 타원이 연달아 앞으로
+          const q = (t - n * 0.055) / 0.3;
+          if (q <= 0 || q >= 1) continue;
+          const x = 4 + (26 + n * 30) * ease.outCubic(q), ry = (18 + n * 11) * (0.4 + 0.9 * ease.outCubic(q)), rx = ry * 0.3;
+          for (let a = 0; a < Math.PI * 2; a += 0.03) {
+            const front = Math.cos(a) > 0;
+            p.dot(x + Math.cos(a) * rx, Math.sin(a) * ry, front ? WHITE : C[4], (1 - q) * (front ? 1 : 0.7));
+            if (front) p.dot(x + Math.cos(a) * rx - 1, Math.sin(a) * ry, C[5], (1 - q) * 0.8);
+          }
+        }
+        if (t < 0.12) sparkle(p, 0, 0, 30 * (1 - t / 0.12), C[7], C[6], 0.5);
+        ps.draw(p);
+      },
+    };
+  });
+}

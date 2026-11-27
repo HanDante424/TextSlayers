@@ -1,0 +1,90 @@
+// 멜 발렌티나 전용 이펙트 (pixelfx core 로 만든 것).
+import { Particles, P, Rng, fit, sparkle, clamp, ease, WHITE } from "./pixelfx/src/core/index.js";
+
+const make = (id, meta, create) => {
+  const m = { name: id, loop: false, options: {}, ...meta };
+  return { id: "custom/" + id, meta: m, mod: { meta: m, create } };
+};
+const ICE = ["#151a3d", "#212f6b", "#2c58aa", "#3a8bd8", "#62c8f4", "#a6ecff", "#dcfbff", "#ffffff"];
+
+// 마름모 얼음 조각: (x, y) 중심, ang 방향, len 길이
+function shard(p, C, x, y, ang, len, a, wide = 0.24) {
+  const ux = Math.cos(ang), uy = Math.sin(ang), half = len * 0.5, w0 = len * wide;
+  for (let d = -half; d <= half; d += 0.6) {
+    const w = w0 * (1 - Math.abs(d) / half);
+    for (let o = -w; o <= w; o += 0.6) p.dot(x + ux * d - uy * o, y + uy * d + ux * o, w - Math.abs(o) < 0.7 ? C[6] : o < 0 ? C[4] : C[3], a);
+  }
+  p.line(x - ux * half * 0.6, y - uy * half * 0.6, x + ux * half * 0.6, y + uy * half * 0.6, C[7], a);
+}
+
+// 기본 공격: 얼음이 대상 뒤(오른쪽)로 퍼진다. 떨어지지 않는다
+export function iceSpray() {
+  const D = 0.45;
+  return make("iceSpray", { size: [150, 120], origin: [30, 60], duration: D, fps: 24 }, () => {
+    const C = fit(ICE, 8), R = new Rng(12);
+    const bits = Array.from({ length: 15 }, () => ({ a: R.range(-0.7, 0.7), sp: R.range(220, 520), len: R.range(6, 12) }));
+    const dots = Array.from({ length: 22 }, () => ({ a: R.range(-0.85, 0.85), sp: R.range(130, 470), c: R.chance(0.5) ? 6 : 5 }));
+    let t = 0;
+    return {
+      update(dt) { t += dt; },
+      draw(p) {
+        const go = (1 - Math.exp(-7 * t)) / 7, a = 1 - clamp((t - 0.18) / (D - 0.2));
+        if (t < 0.1) {
+          p.glow(0, 0, 26, C[5], 1 - t / 0.1);
+          sparkle(p, 0, 0, 12 * (1 - t / 0.1), C[7], C[5], 0.6);
+        }
+        for (const q of bits) shard(p, C, Math.cos(q.a) * q.sp * go, Math.sin(q.a) * q.sp * go, q.a, q.len, a);
+        for (const q of dots) p.dot(Math.cos(q.a) * q.sp * go, Math.sin(q.a) * q.sp * go, C[q.c], a);
+      },
+    };
+  });
+}
+
+// 앱솔루트 제로: 바닥에 솟아 남는 얼음 잔해 (한 무더기)
+export function iceDebris(seed = 31, id = "iceDebris") {
+  const D = 2.6;
+  return make(id, { size: [80, 64], origin: [40, 48], duration: D, fps: 12 }, () => {
+    const C = fit(ICE, 8), R = new Rng(seed);
+    const spikes = Array.from({ length: 6 }, (_, i) => ({ x: R.range(-16, 16), y: R.range(-4, 4), len: R.range(8, i < 2 ? 24 : 15), ang: -Math.PI / 2 + R.range(-0.6, 0.6), at: R.range(0, 0.12) })).sort((a, b) => a.y - b.y);
+    const chips = Array.from({ length: 9 }, () => ({ x: R.range(-24, 24), y: R.range(-6, 7), len: R.range(3, 6), ang: R.range(-0.5, 0.5) }));
+    let t = 0;
+    return {
+      update(dt) { t += dt; },
+      draw(p) {
+        const a = 1 - clamp((t - 1.9) / (D - 2.0));
+        p.glow(0, 0, 24, C[4], 0.22 * a);
+        for (const q of chips) shard(p, C, q.x, q.y, q.ang, q.len, a * clamp(t / 0.15), 0.3);
+        for (const q of spikes) {
+          const g = ease.outBack(clamp((t - q.at) / 0.18));
+          if (g <= 0) continue;
+          const len = q.len * g;
+          shard(p, C, q.x + Math.cos(q.ang) * len * 0.45, q.y + Math.sin(q.ang) * len * 0.45, q.ang, len, a, 0.26);
+        }
+        const tw = Math.floor(t * 5) % spikes.length, s = spikes[tw];
+        if (t > 0.25 && a > 0.4) sparkle(p, s.x + Math.cos(s.ang) * s.len * 0.8, s.y + Math.sin(s.ang) * s.len * 0.8, 3, C[7], C[5], 0.5);
+      },
+    };
+  });
+}
+
+// 앱솔루트 제로: 적의 몸에 달라붙은 얼음 조각 (반복). 중심 = 몸 가운데
+export function iceStuck() {
+  const D = 1.0;
+  return make("iceStuck", { size: [72, 72], origin: [36, 36], duration: D, fps: 10, loop: true }, () => {
+    const C = fit(ICE, 8), R = new Rng(44);
+    const list = Array.from({ length: 9 }, (_, i) => {
+      const a = (i / 9) * Math.PI * 2 + R.range(-0.25, 0.25);
+      return { x: Math.cos(a) * R.range(11, 17), y: Math.sin(a) * R.range(14, 21), ang: a + R.range(-0.3, 0.3), len: R.range(7, 14) };
+    });
+    let t = 0;
+    return {
+      update(dt) { t += dt; },
+      draw(p) {
+        for (const q of list) shard(p, C, q.x, q.y, q.ang, q.len, 0.95, 0.28);
+        const s = list[Math.floor((t / D) * 4) % list.length];
+        sparkle(p, s.x, s.y, 4, C[7], C[5], 0.5);
+        p.glow(0, 0, 30, C[4], 0.18);
+      },
+    };
+  });
+}

@@ -54,7 +54,7 @@ namespace TextSlayers
         /// 기준점을 at 에 맞춰 시트를 그린다. age 는 시작 후 흐른 시간. 도트 배율은 캐릭터 스프라이트와 같다.
         /// loop 가 아니면 끝에서 서서히 사라진다. flip 은 좌우 반전 (시트는 오른쪽 방향 기준).
         /// </summary>
-        static void DrawSheet(string key, Vector2 at, float unit, float age, Color tint, bool flip = false, bool loop = false, float angleDeg = 0f)
+        static void DrawSheet(string key, Vector2 at, float unit, float age, Color tint, bool flip = false, bool loop = false, float angleDeg = 0f, float scale = 1f)
         {
             if (Event.current.type != EventType.Repaint || age < 0f) return;
             var s = FxSheets[key];
@@ -65,7 +65,7 @@ namespace TextSlayers
             int frame = (int)(age * s.Fps);
             frame = loop ? frame % s.Frames : Mathf.Min(frame, s.Frames - 1);
             int column = frame % s.Columns, row = frame / s.Columns;
-            float pixel = FieldPixelSize(unit);
+            float pixel = FieldPixelSize(unit) * scale;
             float pivotX = flip ? s.Width - s.PivotX : s.PivotX;
             var rect = new Rect(at.x - pivotX * pixel, at.y - s.PivotY * pixel, s.Width * pixel, s.Height * pixel);
             var uv = new Rect((float)column * s.Width / texture.width, 1f - (float)(row + 1) * s.Height / texture.height,

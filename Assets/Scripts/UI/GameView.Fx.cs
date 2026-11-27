@@ -115,10 +115,10 @@ namespace TextSlayers
             {
                 case FieldEffectKind.Spin: return IsStium(e) ? SheetTime("stiumSpin") : FxSpin * FxTimeMul;
                 case FieldEffectKind.Smash: return IsStium(e) ? SheetTime("boomDark") : SheetTime("slam");
-                case FieldEffectKind.Burst: return SheetTime(BurstSheet(e));
-                case FieldEffectKind.Pulse: return FxPulse * FxTimeMul;
-                case FieldEffectKind.Grasp: return FxGrasp * FxTimeMul;
-                case FieldEffectKind.Harvest: return FxHarvest * FxTimeMul;
+                case FieldEffectKind.Burst: return SheetTime(VendettaBurstSheet(e) ?? BurstSheet(e));
+                case FieldEffectKind.Pulse: return IsStiumPulse(e) ? SheetTime("darkPulse") : FxPulse * FxTimeMul;
+                case FieldEffectKind.Grasp: return IsStium(e) ? SheetTime("grasp") : FxGrasp * FxTimeMul;
+                case FieldEffectKind.Harvest: return IsStium(e) ? HarvestLength : FxHarvest * FxTimeMul;
                 case FieldEffectKind.Slash: return FxSlash * FxTimeMul;
                 case FieldEffectKind.Swing:
                 {
@@ -130,7 +130,7 @@ namespace TextSlayers
                 case FieldEffectKind.Multi: return MultiStep(e) * Mathf.Max(1, e.Count) + FxMultiOne * FxTimeMul;
                 case FieldEffectKind.Trail: return Mathf.Max(0.1f, e.Duration) + FxAfter * FxTimeMul;
                 case FieldEffectKind.Leap: return Mathf.Max(0.1f, e.Duration) + SheetTime("landing");
-                case FieldEffectKind.Pillar: return FxPillar * FxTimeMul;
+                case FieldEffectKind.Pillar: return e.SkillId == "mel_thunder" ? SheetTime("lightning") : FxPillar * FxTimeMul;
                 case FieldEffectKind.Heal: return SheetTime("heal");
                 case FieldEffectKind.Buff: return SheetTime("buff");
                 case FieldEffectKind.Rain: return Mathf.Max(1, e.Count) * FxRainStep + (FxRainFall + FxBurst) * FxTimeMul;
@@ -207,6 +207,13 @@ namespace TextSlayers
                         break;
                     case FieldEffectKind.Burst:     // 폭발 · 적중: 테마별 시트 (적중 섬광은 이펙트 색을 입힌다)
                     {
+                        if (e.SkillId == DummyBolt) break;     // 더미 원거리 공격: 적중 폭발 없음 (사용자 2026-11-27)
+                        var vendetta = VendettaBurstSheet(e);
+                        if (vendetta != null)
+                        {
+                            foreach (var sp in spots) DrawVendettaBurst(vendetta, sp, unit, age, e.Dir);
+                            break;
+                        }
                         string key = BurstSheet(e);
                         Color tint = key == "hit" ? light : Color.white;
                         foreach (var sp in spots) DrawSheet(key, Feet(sp, unit), unit, age, tint, e.Dir.x < 0f);
@@ -214,6 +221,7 @@ namespace TextSlayers
                     }
                     case FieldEffectKind.Pulse:     // 퍼지는 원
                     {
+                        if (IsStiumPulse(e)) { DrawStiumPulse(c, unit, age); break; }
                         float size = R * 2.3f * Ease(t);
                         Glow(c, size, main, 1f - t);
                         DrawFx(fxDisc, c, size, core, 0.35f * (1f - t));
@@ -222,6 +230,7 @@ namespace TextSlayers
                         break;
                     }
                     case FieldEffectKind.Grasp:     // 퍼진 원이 한곳으로 모임
+                        if (IsStium(e)) break;      // 스티움: 유닛 아래 시트 (DrawGroundEffects)
                         if (t < FxGraspSpread)
                         {
                             float a = Ease(t / FxGraspSpread);
@@ -239,6 +248,7 @@ namespace TextSlayers
                         break;
                     case FieldEffectKind.Harvest:   // 대상들에게서 파티클이 끌려옴
                     {
+                        if (IsStium(e)) { DrawStiumHarvest(e, follow, unit, age, P); break; }
                         if (e.Points == null) break;
                         foreach (var pt in e.Points)
                         {
@@ -334,6 +344,11 @@ namespace TextSlayers
                         break;
                     }
                     case FieldEffectKind.Pillar:    // 위에서 떨어지는 빛 기둥 (번개 · 불기둥 · 빛)
+                        if (e.SkillId == "mel_thunder")        // 썬더 브레이커: 벼락
+                        {
+                            foreach (var sp in spots) DrawSheet("lightning", Feet(sp, unit), unit, age, Color.white);
+                            break;
+                        }
                         foreach (var sp in spots)
                         {
                             float a = 1f - t;
@@ -353,7 +368,9 @@ namespace TextSlayers
                     {
                         float a = Mathf.Min(1f, age / 0.15f) * Mathf.Clamp01((len - age) / 0.25f);
                         Color tint = light; tint.a = a;
-                        DrawSheet("shield", Feet(follow, unit), unit, age, tint, false, true);
+                        if (e.SkillId == "mel_divine_shield")   // 디바인 쉴드: 큰 보호막
+                            DrawSheet("shieldBig", follow, unit, age, new Color(1f, 1f, 1f, a), false, true);
+                        else DrawSheet("shield", Feet(follow, unit), unit, age, tint, false, true);
                         break;
                     }
                     case FieldEffectKind.Buff:      // 강화: 빛줄기
@@ -992,8 +1009,11 @@ namespace TextSlayers
         }
 
         /// <summary>이펙트가 처음 나타날 때 한 번 뿌리는 입자.</summary>
+        static readonly string DummyBolt = "basic_" + BasicKind.Bolt;
+
         static void SpawnForEffect(FieldEffect e, System.Func<Vector2, Vector2> P, float unit)
         {
+            if (e.Kind == FieldEffectKind.Burst && (IsMelBasic(e) || e.SkillId == "mel_fire_buster" || e.SkillId == DummyBolt)) return;
             var th = e.Theme;
             Color col = e.Color;
             Vector2 c = e.Target != null && e.Target.Alive ? P(e.Target.Pos) : P(e.Origin);

@@ -76,7 +76,8 @@ namespace TextSlayers
         public float Duration;       // 지속형 (보호막 · 장판 · 벽 · 십자가 · 심판 준비). 0 이면 화면 기본값
         public int Count;            // 연타 수
         public FieldUnit Target;     // 대상에 붙어 따라다니는 이펙트 (침묵 선언 십자가)
-        public FieldUnit[] Units;    // 대상들을 잇는 이펙트 (흑색 사슬)
+        public FieldUnit[] Units;    // 대상들을 잇는 이펙트 (흑색 사슬) · 따라가는 이펙트 (다연장 탄두)
+        public string SkillId;       // 적중 이펙트를 낸 스킬 (화면이 연출을 고를 때)
         public bool Spawned;         // 화면이 파티클을 이미 뿌렸는가 (화면 전용 상태)
         public FxTheme Theme;        // 시전자의 파티클 테마
     }
@@ -1513,7 +1514,17 @@ namespace TextSlayers
             }
         }
 
+        string effectTag;   // 지금 만드는 이펙트가 어느 스킬의 것인지 (화면 연출용)
+
         bool UseSkill(FieldUnit u, FieldSkillDef s, FieldUnit target)
+        {
+            var previous = effectTag;
+            effectTag = s.Id;
+            try { return UseSkillCore(u, s, target); }
+            finally { effectTag = previous; }
+        }
+
+        bool UseSkillCore(FieldUnit u, FieldSkillDef s, FieldUnit target)
         {
             float range = s.Range > 0f ? s.Range : u.Range;
             var allies = u.IsPlayer ? Players : Enemies;
@@ -1726,7 +1737,8 @@ namespace TextSlayers
                     {
                         SkillHit(p.Source, f, sk, quiet: false);
                         Knockback(f, p.Dir, sk.KnockLevel);
-                        AddEffect(FieldEffectKind.Burst, p.Source, p.Pos, 0.6f, sk.FxColor);
+                        var plain = AddEffect(FieldEffectKind.Burst, p.Source, p.Pos, 0.6f, sk.FxColor);
+                        if (plain != null) { plain.SkillId = sk.Id; plain.Dir = p.Dir; }
                     }
                     else
                     {
@@ -1735,7 +1747,7 @@ namespace TextSlayers
                         if (sk.ExplodeRadius > 0f)
                             foreach (var o in FoesAround(p.Source, p.Pos, sk.ExplodeRadius)) if (o != f) Apply(p.Source, o, sk, 1f, p.Pos);
                         var impact = Fx(sk.Fx2, p.Source, p.Pos, p.Pos, sk.Radius > 0f ? sk.Radius : 0.6f, sk.FxColor);
-                        if (impact != null) impact.Dir = p.Dir;     // 적중 이펙트는 탄이 날아온 방향을 따른다
+                        if (impact != null) { impact.Dir = p.Dir; impact.SkillId = sk.Id; }   // 적중 이펙트는 탄이 날아온 방향을 따른다
                     }
                     if (!(sk.Shape != SkillShape.None && sk.Pierce)) { p.Done = true; break; }
                 }
@@ -1757,7 +1769,7 @@ namespace TextSlayers
         FieldEffect AddEffect(FieldEffectKind kind, FieldUnit src, Vector2 origin, float radius, Color color)
         {
             if (!recordEvents || kind == FieldEffectKind.None) return null;
-            var e = new FieldEffect { Kind = kind, Start = Time, Origin = origin, End = origin, Dir = src.Facing, Radius = radius, Source = src, Color = color, Theme = src.Theme };
+            var e = new FieldEffect { Kind = kind, Start = Time, Origin = origin, End = origin, Dir = src.Facing, Radius = radius, Source = src, Color = color, Theme = src.Theme, SkillId = effectTag };
             Effects.Add(e);
             return e;
         }
@@ -1781,6 +1793,14 @@ namespace TextSlayers
 
         /// <summary>모양 · 대상 규칙 · 효과를 데이터대로 실행한다. 쓸 수 없으면 false (쿨타임 안 돎).</summary>
         bool UseGeneric(FieldUnit u, FieldSkillDef s, FieldUnit current)
+        {
+            var previous = effectTag;
+            effectTag = s.Id;
+            try { return UseGenericCore(u, s, current); }
+            finally { effectTag = previous; }
+        }
+
+        bool UseGenericCore(FieldUnit u, FieldSkillDef s, FieldUnit current)
         {
             var allies = u.IsPlayer ? Players : Enemies;
             float range = s.Range > 0f ? s.Range : u.Range;
@@ -1985,6 +2005,7 @@ namespace TextSlayers
                     if (s.ImpactCone) Fx(FieldEffectKind.FanWave, u, t.Pos, t.Pos + d * 3f, 3f, col, travel);
                     var e2 = Fx(s.Fx2, u, t.Pos, t.Pos, s.Radius > 0f ? s.Radius : 0.9f, col, travel + s.FxDelay2, s.FxTime, s.Hits);
                     if (e2 != null && s.Fx2 == FieldEffectKind.Blink) e2.Target = t;
+                    if (e2 != null) e2.SkillId = s.Id;
                     break;
                 }
 
@@ -2004,7 +2025,8 @@ namespace TextSlayers
                     for (int i = 0; i < picks.Count; i++) { pts[i] = picks[i].Pos; Apply(u, picks[i], s, roll, u.Pos); }
                     var ae = Fx(s.Fx, u, u.Pos, u.Pos, s.Radius, col, 0f, s.FxTime, picks.Count, pts);
                     if (s.Fx == FieldEffectKind.Missiles) u.CaseDownUntil = Time + 0.35f + picks.Count * 0.08f + 0.9f;
-                    if (ae != null && s.Fx == FieldEffectKind.Links) ae.Units = picks.ToArray();   // 흑색 사슬: 적들에게 붙어 따라다님
+                    if (ae != null && (s.Fx == FieldEffectKind.Links || s.Fx == FieldEffectKind.Missiles))
+                        ae.Units = picks.ToArray();   // 흑색 사슬: 적들에게 붙어 따라다님 · 다연장 탄두: 대상을 쫓아간다
                     Fx(s.Fx2, u, u.Pos, u.Pos, s.Radius, col, s.FxDelay2);
                     break;
                 }

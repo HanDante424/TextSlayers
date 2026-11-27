@@ -4,7 +4,9 @@ import { loadEffect, renderFrames, spriteSheet, save } from "./pixelfx/tools/lib
 import { encodePNG } from "./pixelfx/tools/lib/png.mjs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { wave, waveDust, darkPillar, spin, smashArc } from "./stium_fx.mjs";
+import { iceSpray, iceDebris, iceStuck } from "./mel_fx.mjs";
+import { airBoom, iceFall, thrust, pileImpact } from "./vd_fx.mjs";
+import { wave, waveDust, darkPillar, spin, smashArc, stealOrb, stealStart, stealFeed } from "./stium_fx.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url)), project = process.argv[2];
 const WHITE = ["#303030", "#505050", "#787878", "#a0a0a0", "#c8c8c8", "#e0e0e0", "#f4f4f4", "#ffffff"];
@@ -29,6 +31,22 @@ const SPECS = [
   { key: "darkWave", make: wave, to: 0.3, fps: 20 },
   { key: "waveDust", make: waveDust, to: 0.55, fps: 18 },
   { key: "darkPillar", make: darkPillar, to: 0.85, fps: 24 },
+  { key: "grasp", fx: "explosions/stium-implosion", to: 0.78, fps: 30, playFps: 42 },
+  { key: "darkPulse", fx: "shadow/stium-pulse", from: 0.36, to: 1.66, fps: 24 },
+  { key: "stealOrb", make: stealOrb, to: 0.2, fps: 20 },
+  { key: "stealStart", make: stealStart, to: 0.45, fps: 24 },
+  { key: "stealFeed", make: stealFeed, to: 0.5, fps: 24 },
+  { key: "airBoom", make: airBoom, to: 0.95, fps: 24 },
+  { key: "iceFall", make: iceFall, to: 1.05, fps: 24 },
+  { key: "airBoomBig", make: () => airBoom(1.8, "airBoomBig"), to: 1.15, fps: 22 },
+  { key: "pileImpact", make: pileImpact, to: 0.75, fps: 30 },
+  { key: "thrust", make: thrust, to: 0.55, fps: 20 },
+  { key: "iceSpray", make: iceSpray, to: 0.45, fps: 24 },
+  { key: "iceDebris", make: iceDebris, to: 2.6, fps: 12 },
+  { key: "iceDebrisB", make: () => iceDebris(77, "iceDebrisB"), to: 2.6, fps: 12 },
+  { key: "iceStuck", make: iceStuck, to: 1.0, fps: 10, center: true },
+  { key: "lightning", fx: "lightning/lightning-strike", from: 0.55, to: 1.5, fps: 24 },
+  { key: "shieldBig", fx: "holy/divine-shield-big", to: 2.4, fps: 10, center: true },
   { key: "darkSlam", fx: "impacts/ground-slam", to: 1.2, fps: 18, options: { reach: 80, palette: ["#1a0b33", "#3b1a66", "#6e2fb0", "#9a52e0", "#c48cff", "#ecd4ff", "#ffffff"], stone: "#6a3fa0" } },
 ];
 
@@ -65,7 +83,7 @@ for (const s of SPECS) {
   const size = sheet.json.meta.size;
   bytes += size.w * size.h * 4;
   console.log(s.key, "frames", cut.n, "frame", w, h, "sheet", size.w, size.h);
-  rows.push(`            { "${s.key}", new FxSheet("${s.key}", ${cut.n}, ${cols}, ${w}, ${h}, ${px}, ${py}, ${s.fps}f) },   // ${s.fx ?? "stium_fx"}`);
+  rows.push(`            { "${s.key}", new FxSheet("${s.key}", ${cut.n}, ${cols}, ${w}, ${h}, ${px}, ${py}, ${s.playFps ?? s.fps}f) },   // ${s.fx ?? "stium_fx"}`);
   shots.push(cut);
 }
 console.log("texture memory MB", (bytes / 1048576).toFixed(1));
