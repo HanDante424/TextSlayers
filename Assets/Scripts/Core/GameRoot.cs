@@ -172,6 +172,9 @@ namespace TextSlayers
             SelectedParty.Add(characterId);
         }
 
+        /// <summary>출전 선택을 모두 비운다. 캐릭터별 전술 · 스킬 구성은 유지.</summary>
+        public void ClearParty() => SelectedParty.Clear();
+
         // ── 출전 구성 (전술 · 패시브 1 · 액티브 3), 세션 동안 캐릭터별로 유지 ──
         readonly System.Collections.Generic.Dictionary<string, PartySlot> loadouts =
             new System.Collections.Generic.Dictionary<string, PartySlot>();

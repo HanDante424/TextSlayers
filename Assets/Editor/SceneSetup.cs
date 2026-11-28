@@ -13,7 +13,7 @@ namespace TextSlayers.EditorTools
     public static class SceneSetup
     {
         const string ScenePath = "Assets/Scenes/Main.unity";
-        const string ProductName = "TextSlayers";
+        internal const string ProductName = "슬레이어즈 워밴드";   // 표시 이름 '슬레이어즈 : 워밴드'. 파일 이름에 ':' 를 쓸 수 없어 뺀다
         static readonly Color BackgroundColor = new Color(0.07f, 0.07f, 0.09f);
 
         [MenuItem("TextSlayers/씬 · 빌드 설정 초기화")]
