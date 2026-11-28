@@ -61,6 +61,8 @@ namespace TextSlayers
                 case GameScreen.FieldBattle: DrawFieldBattle(g); break;
                 case GameScreen.Loadout: DrawLoadout(g); break;
                 case GameScreen.EnemySetup: DrawEnemySetup(g); break;
+                case GameScreen.Placement: DrawPlacement(g); break;
+                case GameScreen.Codex: DrawCodex(g); break;
             }
 
             DrawToast(g);
@@ -110,8 +112,18 @@ namespace TextSlayers
                     if (IsConfirm(e.keyCode)) { g.Go(GameScreen.Lobby); e.Use(); }
                     break;
 
+                case GameScreen.Codex:
+                    if (e.keyCode == KeyCode.Escape && codexId != null) { codexId = null; e.Use(); }
+                    break;
+
                 case GameScreen.FieldBattle:
-                    if (g.Field != null && g.Field.IsOver && IsConfirm(e.keyCode)) { g.FinishFieldBattle(); e.Use(); }
+                    if (e.keyCode == KeyCode.Escape && g.FieldFocus != null)
+                    {
+                        if (tipSkillId != null) tipSkillId = null;     // 툴팁부터 닫는다
+                        else g.FieldFocus = null;
+                        e.Use();
+                    }
+                    else if (g.Field != null && g.Field.IsOver && IsConfirm(e.keyCode)) { g.FinishFieldBattle(); e.Use(); }
                     else if (g.Field != null && g.Field.Stage.IsTest && DebugKey(g, e.keyCode)) e.Use();
                     break;
             }
@@ -142,8 +154,10 @@ namespace TextSlayers
 
             // 전투 진입은 디버그 맵만 두고, 캐릭터 정보 버튼과 상단 Lv · 골드 · 메모리 · 경험치 표시는 뺐다
             // (사용자 2026-11-28: UI 정돈). 스테이지 · 필드 전투 · 캐릭터 정보 화면 코드는 남겨 둔다
-            float y = (vh - (ButtonH * 3 + 12 * 2)) / 2;
+            float y = (vh - (ButtonH * 4 + 12 * 3)) / 2;
             if (GUI.Button(MenuRect(y), "<color=#ffd76a>디버그 맵</color>", button)) { resetArmed = false; g.EnterDebugMap(); }
+            y += ButtonH + 12;
+            if (GUI.Button(MenuRect(y), "도감", button)) { resetArmed = false; OpenCodex(); g.Go(GameScreen.Codex); }
             y += ButtonH + 12;
             if (GUI.Button(MenuRect(y), "저장", button)) { resetArmed = false; g.SaveNow(); }
             y += ButtonH + 12;
@@ -273,9 +287,8 @@ namespace TextSlayers
         }
 
         // ───────────────────────── v0.2 필드 전투 ─────────────────────────
-        const float SideW = 380f;
-        const float FieldLogH = 190f;
         const float TopBarH = 52f;
+        const float FieldGap = 8f;                   // 전투 화면 칸 사이 간격 [임시]
 
         static readonly Color FieldBg = new Color(0.10f, 0.13f, 0.11f);
         static readonly Color FieldLine = new Color(0.16f, 0.20f, 0.17f);
@@ -331,39 +344,55 @@ namespace TextSlayers
             var b = g.Field;
             if (b == null) { g.Go(GameScreen.Lobby); return; }
 
+            bool debug = b.Stage.IsTest;
+
+            // 가운데는 필드, 왼쪽은 아군 카드 · 오른쪽은 적 카드, 디버그 막대는 맨 아래 (사용자 2026-11-28)
+            float top = TopBarH + FieldGap;
+            float barY = vh - FieldGap - DebugBarH;
+            float areaH = (debug ? barY - FieldGap : vh - FieldGap) - top;
+            float allyW = BattleColumnW(allyGraph), foeW = BattleColumnW(foeGraph);   // 그래프를 켠 쪽은 열이 넓어진다
+            float areaX = FieldGap * 2 + allyW;
+            float areaW = vw - areaX - foeW - FieldGap * 2;
+            float baseUnit = Mathf.Min(areaW / FieldConst.Width, areaH / FieldConst.Height);
+            var view = new Rect(areaX + (areaW - FieldConst.Width * baseUnit) / 2, top + (areaH - FieldConst.Height * baseUnit) / 2,
+                                FieldConst.Width * baseUnit, FieldConst.Height * baseUnit);
+
+            // 필드를 먼저 그린다: 확대해서 넘치는 부분은 덮고, 상단 바 · 카드는 그 위에 그린다
+            var field = CameraField(g, b, view, baseUnit, out float unit);
+            DrawField(field, unit, b);
+            MaskOutside(view);
+
             // 상단 바
             Fill(new Rect(0, 0, vw, TopBarH), Panel);
             string wave = b.WaveCount > 1 ? $"  <color=#999999>웨이브 {b.WaveIndex + 1}/{b.WaveCount}</color>" : "";
             string altar = b.HasAltar ? (b.EyeOpen ? "   <color=#ff6b6b>악신의 눈</color>" : $"   <color=#cc8888>재단 {b.Altar:0}/50</color>") : "";
-            GUI.Label(new Rect(Pad, 10, vw * 0.6f, 32), $"<b>{b.Stage.Name}</b>{wave}   <color=#aaaaaa>{b.Time:0.0}초</color>{altar}", label);
+            int dealt = 0;
+            foreach (var u in b.Players) dealt += u.DamageDealt;
+            string meter = dbgTool == DebugTool.None ? $"   <size=17><color=#aaaaaa>총 피해 {dealt} · 초당 {dealt / b.MeterTime:0.0}</color></size>" : "";
+            GUI.Label(new Rect(Pad, 10, vw * 0.6f, 32), $"<b>{b.Stage.Name}</b>{wave}   <color=#aaaaaa>{b.Time:0.0}초</color>{altar}{meter}", label);
 
-            bool debug = b.Stage.IsTest;
             if (debug && dbgTool != DebugTool.None)
                 GUI.Label(new Rect(vw * 0.35f, 10, vw * 0.3f, 32), $"<color=#ffd76a>{ToolHint(dbgTool)}</color>", center);
             if (debug && g.FieldPaused)
                 GUI.Label(new Rect(vw * 0.35f, 30, vw * 0.3f, 24), "<color=#ff8f8f><size=16>일시정지</size></color>", center);
+            else if (g.FieldFocus != null && dbgTool == DebugTool.None)
+                GUI.Label(new Rect(vw * 0.35f, 30, vw * 0.3f, 24), $"<color=#8fd3ff><size=16>슬로우 ×{GameRoot.FocusSlowSpeed:0.0#}</size></color>", center);
 
-            // 필드
-            float areaW = vw - Pad * 3 - SideW;
-            float areaH = vh - TopBarH - FieldLogH - Pad * 3 - (debug ? DebugBarH + Pad : 0f);
-            float unit = Mathf.Min(areaW / FieldConst.Width, areaH / FieldConst.Height);
-            var field = new Rect(Pad, TopBarH + Pad, FieldConst.Width * unit, FieldConst.Height * unit);
-            DrawField(field, unit, b);
+            // 필드 밖으로 번지는 이펙트보다 카드가 위에 보이도록 필드 뒤에 그린다
+            DrawBattleColumn(new Rect(FieldGap, top, allyW, areaH), "아군", b.Players, ref allyScroll, ref allyGraph, true);
+            DrawBattleColumn(new Rect(vw - FieldGap - foeW, top, foeW, areaH), $"적 {b.Enemies.Count}", b.Enemies, ref foeScroll, ref foeGraph, false);
 
-            // 오른쪽: 아군 피해 집계
-            var side = new Rect(vw - Pad - SideW, TopBarH + Pad, SideW, areaH);
-            DrawPartyPanel(side, b);
-
-            // 아래: (디버그 막대) + 로그. 버튼 · 클릭은 로그를 그린 뒤 (HandleKeys 주석 참고)
-            float logY = TopBarH + Pad * 2 + areaH;
-            float barY = logY;
-            if (debug) logY += DebugBarH + Pad;
-            DrawLog(new Rect(Pad, logY, vw - Pad * 2, vh - logY - Pad), g.Log);
+            // 설명 창의 버튼 → 설명 창 · 확대 해제 클릭 → 디버그 도구 클릭 순서
+            if (g.FieldFocus != null)
+            {
+                var info = DrawFocusInfo(g, g.FieldFocus, view);
+                if (g.FieldFocus != null) HandleFocusClick(g, view, info, DrawSkillTooltip(info, view));
+            }
 
             if (debug)
             {
-                DrawDebugBar(new Rect(Pad, barY, vw - Pad * 2, DebugBarH), g, b);
-                HandleFieldClick(field, unit, b);
+                DrawDebugBar(new Rect(FieldGap, barY, vw - FieldGap * 2, DebugBarH), g, b);
+                HandleFieldClick(view, field, unit, b);
                 if (GUI.Button(new Rect(vw - Pad - 120, 6, 120, 40), "나가기", button)) { dbgTool = DebugTool.None; g.ExitDebugMap(); return; }
             }
             else if (GUI.Button(new Rect(vw - Pad - 120, 6, 120, 40), b.IsOver ? "결과 보기" : "나가기", button)) { g.FinishFieldBattle(); return; }
@@ -432,10 +461,10 @@ namespace TextSlayers
 
         static string ToolLabel(string text, DebugTool t) => dbgTool == t ? $"<color=#ffd76a>[{text}]</color>" : text;
 
-        static void HandleFieldClick(Rect field, float unit, FieldBattle b)
+        static void HandleFieldClick(Rect view, Rect field, float unit, FieldBattle b)
         {
             Event e = Event.current;
-            if (dbgTool == DebugTool.None || e.type != EventType.MouseDown || !field.Contains(e.mousePosition)) return;
+            if (dbgTool == DebugTool.None || e.type != EventType.MouseDown || !view.Contains(e.mousePosition)) return;
             if (e.button == 1) { dbgTool = DebugTool.None; e.Use(); return; } // 오른쪽 클릭: 도구 해제
 
             var pos = new Vector2((e.mousePosition.x - field.x) / unit, (e.mousePosition.y - field.y) / unit);
@@ -497,7 +526,7 @@ namespace TextSlayers
             Fill(r, FieldBg);
             // 바닥 타일이 있으면 거리 눈금은 옅게
             Color line = FieldLine;
-            if (DrawGround(r, unit, b)) line.a *= 0.3f;
+            if (DrawGround(r, unit, b.Stage)) line.a *= 0.3f;
             for (int i = 1; i < (int)FieldConst.Width; i++)
                 Fill(new Rect(r.x + i * unit, r.y, 1, r.height), line);
             for (int i = 1; i < (int)FieldConst.Height; i++)
@@ -708,35 +737,6 @@ namespace TextSlayers
             string n = u.Name;
             if (!u.IsPlayer && n.StartsWith("테스트 더미")) return "D" + n.Substring(n.Length - 1);
             return n.Length <= 2 ? n : n.Substring(0, 2);
-        }
-
-        static void DrawPartyPanel(Rect r, FieldBattle b)
-        {
-            Fill(r, Panel);
-            float x = r.x + 10, w = r.width - 20, y = r.y + 8;
-            float t = b.MeterTime;
-            int total = 0;
-            foreach (var u in b.Players) total += u.DamageDealt;
-            GUI.Label(new Rect(x, y, w, 30), $"<b>아군</b>  <color=#aaaaaa>총 피해 {total} · 초당 {total / t:0.0}</color>", label);
-            y += 34;
-
-            foreach (var u in b.Players)
-            {
-                if (y + 56 > r.yMax) break;
-                string dead = u.Alive ? "" : " <color=#ff8f8f>(쓰러짐)</color>";
-                GUI.Label(new Rect(x, y, w, 26),
-                    $"{u.Name}{dead} <size=15><color=#aaaaaa>{FieldData.RoleName(u.Role)} · {FieldData.StrategyName(u.Strategy)}</color></size>", label);
-                y += 26;
-                DrawBar(new Rect(x, y, w * 0.45f, 20), u.HpRatio, AllyHpColor, $"{u.C.Hp}/{u.C.Stats.HP}");
-                GUI.Label(new Rect(x + w * 0.45f + 8, y - 4, w * 0.55f - 8, 26),
-                    $"<size=16>피해 {u.DamageDealt} · 초당 {u.DamageDealt / t:0.0}</size>", label);
-                y += 30;
-            }
-
-            int taken = 0;
-            foreach (var e in b.Enemies) taken += e.DamageTaken;
-            if (y + 30 <= r.yMax)
-                GUI.Label(new Rect(x, y + 4, w, 30), $"<b>적</b> <color=#aaaaaa>{b.Enemies.Count}명 · 받은 피해 {taken}</color>", label);
         }
 
         // ───────────────────────── 부품 ─────────────────────────

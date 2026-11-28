@@ -52,6 +52,7 @@ namespace TextSlayers
         static readonly string[] Gunners = { "vendetta", "c12" };                  // 벤데타 · 릭
 
         public const string MoonShadowPassive = "yw_moon_shadow";
+        public const string VendettaBasicRound = "vd_basic_round";   // 벤데타 기본탄 (총잡이 고정 패시브)
         public const string GluttonPassive = "mel_glutton";
         public static readonly string[] GluttonSkills = { "mel_aperitif", "mel_hors", "mel_appetizer" };
         public static readonly string[] MoonShadowSkills = { "yw_shadow_open", "yw_shadow_pierce", "yw_shadow_tail" };
@@ -62,6 +63,7 @@ namespace TextSlayers
             P("stium_mana_barrier", "어둠의 마나 장벽", SkillTag.Defense), P("stium_deep_mana", "깊은 어둠의 마나", SkillTag.Defense), P("stium_awaken_dark", "각성 - 어둠", SkillTag.Support),
             P("ern_flame_sword", "화염의 검", SkillTag.Attack), P("ern_okyeom", "옥염", SkillTag.Attack), P("ern_flame_armor", "화염 갑주", SkillTag.Defense),
             P("mel_luck", "압도적 행운", SkillTag.Support), P("mel_share", "운의 분배", SkillTag.Support), P(GluttonPassive, "글러트니", SkillTag.Attack, "변신: 액티브가 식 3종으로 고정, 근거리, 회색 기운"),
+            P(VendettaBasicRound, "대구경 탄두", SkillTag.Attack, "장탄수 6 · 장전은 구현, 추가 피해 · 방어력 감소는 미구현"),
             P("vd_aim", "정조준", SkillTag.Attack), P("vd_case_ready", "케이스 준비", SkillTag.Support), P("vd_ap_round", "철갑탄", SkillTag.Attack),
             P("pc_stone", "현자의 돌", SkillTag.Support), P("pc_mass", "양산화", SkillTag.Support), P("pc_magnum", "마그눔 오푸스", SkillTag.Support),
             P("mail_one_hundred", "일당백", SkillTag.Defense), P("mail_spirit", "압도적 투기", SkillTag.Defense), P("mail_all_in", "전심전력", SkillTag.Attack),
@@ -96,6 +98,7 @@ namespace TextSlayers
                 c.Eclipse = System.Array.IndexOf(EclipseMembers, c.Id) >= 0;
                 c.Gunner = System.Array.IndexOf(Gunners, c.Id) >= 0;
                 c.ShowWeapons = c.Id == "vendetta";
+                c.FixedPassive = c.Id == "vendetta" ? VendettaBasicRound : null;
                 c.FireArmTrait = c.Id == "c13";
 
                 // 선택 화면 전술은 4종뿐 → 호위 · 진형 유지 기본값은 사거리로 바꾼다 [해석]

@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace TextSlayers
 {
-    public enum GameScreen { Title, Lobby, StageSelect, Character, Battle, Result, FieldStageSelect, PartySelect, FieldBattle, Loadout, EnemySetup }
+    public enum GameScreen { Title, Lobby, StageSelect, Character, Battle, Result, FieldStageSelect, PartySelect, FieldBattle, Loadout, EnemySetup, Placement, Codex }
 
     public struct ResultInfo
     {
@@ -41,6 +41,9 @@ namespace TextSlayers
         public float FieldSpeed => FieldSpeeds[fieldSpeedIndex];
         /// <summary>필드 전투 일시정지 (디버그). 멈춘 동안 이펙트도 멈춘다.</summary>
         public bool FieldPaused { get; private set; }
+        public const float FocusSlowSpeed = 0.3f;   // 캐릭터를 확대해 보는 동안의 전투 배속 [임시]
+        /// <summary>전투 화면에서 확대해 보고 있는 유닛 (null = 없음). 있으면 전투가 느려진다.</summary>
+        public FieldUnit FieldFocus { get; set; }
         public ResultInfo LastResult { get; private set; }
 
         public string Toast { get; private set; }
@@ -80,7 +83,9 @@ namespace TextSlayers
             if (Current == GameScreen.Battle && Battle != null) Battle.Tick(Time.deltaTime);
             if (Current == GameScreen.FieldBattle && Field != null)
             {
-                if (!FieldPaused) Field.Update(Time.deltaTime, FieldSpeed);
+                // 디버그 제거 · 웨이브 교체로 사라진 유닛은 놓아준다
+                if (FieldFocus != null && !Field.Players.Contains(FieldFocus) && !Field.Enemies.Contains(FieldFocus)) FieldFocus = null;
+                if (!FieldPaused) Field.Update(Time.deltaTime, FieldFocus != null ? FocusSlowSpeed : FieldSpeed);
                 DrainFieldEvents();
             }
 
@@ -147,6 +152,7 @@ namespace TextSlayers
         {
             Field = null;
             FieldPaused = false;
+            FieldFocus = null;
             Log.Clear();
             Current = GameScreen.Lobby;
         }
@@ -232,7 +238,19 @@ namespace TextSlayers
         {
             if (!LoadoutReady(out string problem)) { ShowToast(problem); return; }
             if (PendingFieldStage != null && PendingFieldStage.IsTest) Current = GameScreen.EnemySetup;
-            else StartFieldStage();
+            else GoPlacement();
+        }
+
+        // ── 아군 배치 (사용자 2026-11-28), 세션 동안 캐릭터별 자리를 유지 ──
+        public Deployment Deploy { get; } = new Deployment();
+
+        /// <summary>전투 직전의 배치 화면으로. 편성에서 빠진 캐릭터의 자리는 지운다.</summary>
+        public void GoPlacement()
+        {
+            if (PendingFieldStage == null || SelectedParty.Count == 0) return;
+            if (!LoadoutReady(out string problem)) { ShowToast(problem); return; }
+            Deploy.Retain(SelectedParty);
+            Current = GameScreen.Placement;
         }
 
         /// <summary>더미 1명 추가 (종류 기본 전술: 근거리 돌진 · 원거리 도주 · 견제).</summary>
@@ -274,16 +292,19 @@ namespace TextSlayers
         {
             if (PendingFieldStage == null || SelectedParty.Count == 0) return;
             if (!LoadoutReady(out string problem)) { ShowToast(problem); return; }
+            if (!Deploy.AllPlaced(SelectedParty)) { ShowToast("모든 캐릭터를 배치해 주세요."); return; }
             var party = new PartySlot[SelectedParty.Count];
             for (int i = 0; i < party.Length; i++)
             {
                 var l = Loadout(SelectedParty[i]);
                 party[i] = new PartySlot { Def = l.Def, Strategy = l.Strategy, Skills = (string[])l.Skills.Clone(), Passive = l.Passive };
+                if (Deploy.TryGet(SelectedParty[i], out var pos)) party[i].StartPos = pos;
             }
             Log.Clear();
             var enemies = PendingFieldStage.IsTest ? DebugEnemies : null;
             Field = new FieldBattle(PendingFieldStage, party, Progress.Level, System.Environment.TickCount, recordEvents: true, enemies: enemies);
             FieldPaused = false;
+            FieldFocus = null;
             DrainFieldEvents();
             Current = GameScreen.FieldBattle;
         }

@@ -135,6 +135,8 @@ namespace TextSlayers
         public bool RewardGiven;
         public int DamageTaken;
         public int DamageDealt;
+        public int HealDone;                  // 실제로 채운 체력 (넘친 회복 제외): 내가 준 회복
+        public int HealTaken;                 // 실제로 채워진 체력: 내가 받은 회복
         public bool Immortal;                 // 체력 무한 (테스트 더미)
         public float DamageMul = 1f;          // 0 이면 피해 0 (수치 미정 캐릭터, 사용자 2026-11-26)
         public Vector2 Facing = Vector2.right; // 마지막으로 노린 방향 (이펙트용)
@@ -379,8 +381,7 @@ namespace TextSlayers
                 if (slot.Def.Gunner) u.Ammo = GunnerAmmo;
                 foreach (var sk in u.Skills) if (sk.Erosion) u.AppliesErosion = true;
                 if (slot.Def.Eclipse) EclipseCount++;
-                float yFrac = (i + 1f) / (party.Length + 1f);
-                u.Pos = new Vector2(FieldConst.PlayerStartX + (i % 2) * FieldConst.PlayerStartStagger, FieldConst.Height * yFrac);
+                u.Pos = slot.StartPos.HasValue ? Deployment.Clamp(slot.StartPos.Value) : Deployment.DefaultPos(i, party.Length);
                 u.FlankEdgeY = 0f;   // 후방 침입 가장자리는 첫 이동 때 적 배치를 보고 정한다
                 u.ActionTimer = Interval(u) * (float)rng.NextDouble() * 0.5f;
                 Players.Add(u);
@@ -509,7 +510,7 @@ namespace TextSlayers
         static Vector2 PlayerSpawnCenter => new Vector2(FieldConst.PlayerStartX + FieldConst.PlayerStartStagger * 0.5f, FieldConst.Height * 0.5f);
 
         /// <summary>적 시작 위치: 오른쪽에 세로로 고르게, 많으면 여러 줄.</summary>
-        static Vector2 StartPos(int i, int count)
+        public static Vector2 StartPos(int i, int count)
         {
             const int PerColumn = 8;
             int cols = Mathf.Max(1, Mathf.CeilToInt(count / (float)PerColumn));
@@ -609,10 +610,20 @@ namespace TextSlayers
 
         public void DebugResetMeters()
         {
-            foreach (var u in Players) { u.DamageDealt = 0; u.DamageTaken = 0; }
-            foreach (var u in Enemies) { u.DamageDealt = 0; u.DamageTaken = 0; }
+            foreach (var u in Players) { u.DamageDealt = 0; u.DamageTaken = 0; u.HealDone = 0; u.HealTaken = 0; }
+            foreach (var u in Enemies) { u.DamageDealt = 0; u.DamageTaken = 0; u.HealDone = 0; u.HealTaken = 0; }
             MeterStart = Time;
             Emit(FieldEventKind.Info, null, null, 0, false, "[디버그] 피해 집계 초기화");
+        }
+
+        /// <summary>체력을 채우고 회복 집계에 넣는다. 모든 회복은 여기를 지난다.</summary>
+        static void RestoreHp(FieldUnit healer, FieldUnit target, int amount)
+        {
+            int before = target.C.Hp;
+            target.C.Hp = Mathf.Min(target.C.Stats.HP, before + amount);
+            int restored = Mathf.Max(0, target.C.Hp - before);
+            healer.HealDone += restored;
+            target.HealTaken += restored;
         }
 
         void RemoveEnemy(FieldUnit u)
@@ -733,7 +744,7 @@ namespace TextSlayers
                 {
                     int add = Mathf.FloorToInt(u.RegenCarry);
                     u.RegenCarry -= add;
-                    u.C.Hp = Mathf.Min(u.C.Stats.HP, u.C.Hp + add);
+                    RestoreHp(u, u, add);
                 }
             }
         }
@@ -1774,7 +1785,7 @@ namespace TextSlayers
                         sum += dmg;
                     }
                     int heal = Mathf.RoundToInt(sum * HarvestHealRatio);
-                    u.C.Hp = Mathf.Min(u.C.Stats.HP, u.C.Hp + heal);
+                    RestoreHp(u, u, heal);
                     Emit(FieldEventKind.Skill, u, null, sum, false, $"{s.Name} — {hit.Count}명, 피해 {sum}, 회복 {heal}");
                     return true;
                 }
@@ -1823,7 +1834,7 @@ namespace TextSlayers
                     if (t == null) return false;
                     int amount = Damage.Heal(u.C, s.Coef, u.BuffTimer > 0f ? u.BuffMul : 1f);
                     int before = t.C.Hp;
-                    t.C.Hp = Mathf.Min(t.C.Stats.HP, t.C.Hp + amount);
+                    RestoreHp(u, t, amount);
                     Emit(FieldEventKind.Heal, u, t, t.C.Hp - before, false, s.Name);
                     return true;
                 }

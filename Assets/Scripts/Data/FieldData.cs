@@ -172,6 +172,7 @@ namespace TextSlayers
         public int BasicKnock = FieldConst.MeleeBasicKnockLevel;   // 기본 공격 넉백 단계 (캐릭터별, ConceptCharacters)
         public FxTheme Theme;
         public string[] Passives = new string[0];   // 고유 패시브 3 (장착 1)
+        public string FixedPassive;                 // 고르지 않아도 항상 갖는 패시브 (벤데타 기본탄). 없으면 null
         public bool Gunner;                         // 총잡이: 기본탄 장탄 · 장전
         public bool Wolf;                           // 늑대 태그
         public bool Eclipse;                        // 이클립스 소속 (악신의 눈 재단)
@@ -210,6 +211,7 @@ namespace TextSlayers
         public Strategy Strategy;
         public string[] Skills;
         public string Passive;
+        public Vector2? StartPos;          // 배치 화면에서 정한 시작 위치 (없으면 기본 위치)
     }
 
     /// <summary>필드 전투 공통 상수 [임시].</summary>
