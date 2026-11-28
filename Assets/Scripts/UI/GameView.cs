@@ -131,28 +131,19 @@ namespace TextSlayers
         static void DrawTitle(GameRoot g)
         {
             float y = vh * 0.3f;
-            GUI.Label(new Rect(0, y, vw, 80), "TEXT SLAYERS", title);
-            GUI.Label(new Rect(0, y + 90, vw, 40), "글자로 베어 넘기는 슬레이어", center);
+            GUI.Label(new Rect(0, y, vw, 80), "슬레이어즈 : 워밴드", title);
             if (GUI.Button(MenuRect(vh * 0.62f), "시작", button)) g.Go(GameScreen.Lobby);
             GUI.Label(new Rect(0, vh * 0.62f + ButtonH + 12, vw, 30), "<color=#888888>아무 키나 누르세요</color>", center);
         }
 
         static void DrawLobby(GameRoot g)
         {
-            var p = g.Progress;
             Header("로비");
-            GUI.Label(new Rect(Pad, 80, vw - Pad * 2, 32),
-                $"에른  Lv.{p.Level}    골드 {p.Gold}    메모리 {p.Memory}", center);
-            DrawExpBar(new Rect((vw - MenuW) / 2, 118, MenuW, BarH), p);
 
-            float y = 180;
-            if (GUI.Button(MenuRect(y), "스테이지", button)) { resetArmed = false; g.Go(GameScreen.StageSelect); }
-            y += ButtonH + 12;
-            if (GUI.Button(MenuRect(y), "필드 전투 <size=16>(v0.2 테스트)</size>", button)) { resetArmed = false; g.Go(GameScreen.FieldStageSelect); }
-            y += ButtonH + 12;
+            // 전투 진입은 디버그 맵만 두고, 캐릭터 정보 버튼과 상단 Lv · 골드 · 메모리 · 경험치 표시는 뺐다
+            // (사용자 2026-11-28: UI 정돈). 스테이지 · 필드 전투 · 캐릭터 정보 화면 코드는 남겨 둔다
+            float y = (vh - (ButtonH * 3 + 12 * 2)) / 2;
             if (GUI.Button(MenuRect(y), "<color=#ffd76a>디버그 맵</color>", button)) { resetArmed = false; g.EnterDebugMap(); }
-            y += ButtonH + 12;
-            if (GUI.Button(MenuRect(y), "캐릭터 정보", button)) { resetArmed = false; g.Go(GameScreen.Character); }
             y += ButtonH + 12;
             if (GUI.Button(MenuRect(y), "저장", button)) { resetArmed = false; g.SaveNow(); }
             y += ButtonH + 12;
@@ -282,8 +273,6 @@ namespace TextSlayers
         }
 
         // ───────────────────────── v0.2 필드 전투 ─────────────────────────
-        const float CardH = 72f;
-        const float CardMinW = 290f;
         const float SideW = 380f;
         const float FieldLogH = 190f;
         const float TopBarH = 52f;
@@ -299,7 +288,6 @@ namespace TextSlayers
         static readonly Color GuardColor = new Color(0.6f, 0.85f, 1f);
         static readonly Color MarkColor = new Color(1f, 0.3f, 0.3f);
 
-        static Vector2 partyScroll;
 
         static void DrawFieldStageSelect(GameRoot g)
         {
@@ -336,61 +324,6 @@ namespace TextSlayers
                 waves[i] = string.Join(", ", counts);
             }
             return string.Join("  →  ", waves);
-        }
-
-        static void DrawPartySelect(GameRoot g)
-        {
-            var stage = g.PendingFieldStage;
-            if (stage == null) { g.Go(GameScreen.FieldStageSelect); return; }
-            var sel = g.SelectedParty;
-            Header($"출전 선택  {sel.Count}/{FieldConst.MaxPartySize}  —  {stage.Name}");
-            int activeTotal = 0;
-            foreach (var c in FieldData.Roster) if (c.Enabled) activeTotal++;
-
-            // 선택 순서 = 편성 순서
-            var names = new string[sel.Count];
-            for (int i = 0; i < sel.Count; i++) names[i] = $"{i + 1}. {FieldData.Character(sel[i]).Name}";
-            string order = sel.Count > 0 ? string.Join("   ", names) : $"<color=#999999>캐릭터를 눌러 선택하세요 (출전 가능 {activeTotal}명)</color>";
-            GUI.Label(new Rect(Pad, 70, vw - Pad * 2, 32), order, center);
-
-            // 캐릭터 목록 (스크롤, GUILayout 미사용)
-            float top = 110f;
-            float bottom = vh - Pad - ButtonH - Pad;
-            var view = new Rect(Pad, top, vw - Pad * 2, bottom - top);
-            float innerW = view.width - 20f;
-            int cols = Mathf.Max(2, Mathf.FloorToInt(innerW / CardMinW));
-            float gap = 8f;
-            float cw = (innerW - gap * (cols - 1)) / cols;
-            // 출전 가능(스킬 컨셉 있음) 캐릭터를 앞에, 비활성은 뒤에 흐리게 (사용자 2026-11-26)
-            var roster = new System.Collections.Generic.List<CharacterDef>();
-            foreach (var c in FieldData.Roster) if (c.Enabled) roster.Add(c);
-            foreach (var c in FieldData.Roster) if (!c.Enabled) roster.Add(c);
-            int rows = Mathf.CeilToInt(roster.Count / (float)cols);
-            var content = new Rect(0, 0, innerW, rows * (CardH + gap));
-
-            Fill(view, Panel);
-            partyScroll = GUI.BeginScrollView(view, partyScroll, content);
-            for (int i = 0; i < roster.Count; i++)
-            {
-                var c = roster[i];
-                int idx = sel.IndexOf(c.Id);
-                var r = new Rect((i % cols) * (cw + gap), (i / cols) * (CardH + gap), cw, CardH);
-                if (idx >= 0) Fill(new Rect(r.x - 2, r.y - 2, r.width + 4, r.height + 4), PlayerColor);
-                string mark = idx >= 0 ? $"<color=#8fd3ff>[{idx + 1}]</color> " : "";
-                string info = c.Enabled ? $"{c.Kind} · {FieldData.RoleName(c.BaseRole)} · {FieldData.StrategyName(c.DefaultStrategy)}" : "비활성 (스킬 컨셉 없음)";
-                string text = $"{mark}<b>{c.Name}</b>\n<size=15><color=#aaaaaa>{info}</color></size>";
-                GUI.enabled = c.Enabled;
-                if (GUI.Button(r, text, button)) g.ToggleParty(c.Id);
-                GUI.enabled = true;
-            }
-            GUI.EndScrollView();
-
-            float by = vh - Pad - ButtonH;
-            float bw = (vw - Pad * 3) / 2;
-            if (GUI.Button(new Rect(Pad, by, bw, ButtonH), "뒤로", button)) g.Go(GameScreen.FieldStageSelect);
-            GUI.enabled = sel.Count > 0;
-            if (GUI.Button(new Rect(Pad * 2 + bw, by, bw, ButtonH), $"다음: 전술 · 스킬 ({sel.Count}명)", button)) g.GoLoadout();
-            GUI.enabled = true;
         }
 
         static void DrawFieldBattle(GameRoot g)

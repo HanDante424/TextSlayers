@@ -50,7 +50,7 @@ namespace TextSlayers
         static void DrawEnemySetup(GameRoot g)
         {
             var stage = g.PendingFieldStage;
-            if (stage == null) { g.Go(GameScreen.FieldStageSelect); return; }
+            if (stage == null) { g.Go(GameScreen.Lobby); return; }
             var setup = g.DebugEnemies;
             var list = setup.Entries;
             Header($"적 전술 · 배치  —  {stage.Name}  ({setup.Total}/{FieldBattle.MaxDebugEnemies}명)");
