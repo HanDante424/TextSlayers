@@ -539,6 +539,7 @@ namespace TextSlayers
                 case KeyCode.R: b.DebugResetMeters(); return true;
                 case KeyCode.E: b.DebugOpenEye(); return true;      // 악신의 눈 바로 열기
                 case KeyCode.F: b.DebugIgnite(); return true;       // 점화 100 (화염의 팔)
+                case KeyCode.G: b.DebugToggleRailForm(); return true;   // 레일: 검 ↔ 결합 장병기
                 case KeyCode.H: b.DebugHurtAllies(); return true;   // 아군 체력 25% (옥염 · 저체력 조건)
             }
             return false;
@@ -697,6 +698,7 @@ namespace TextSlayers
                 DrawFieldSprite(sprite, spriteRect, faceLeft, u, flash);
                 if (u.Def != null && u.Def.ShowWeapons) DrawVendettaPistol(spriteRect, faceLeft, u, now);
             }
+            if (u.Def != null && u.Def.Id == FieldBattle.RickId) DrawRickPistol(spriteRect, faceLeft, u, now);
             if (u.Immortal)   // 테스트 더미: 전술 한 글자 (돌 · 침 · 견 · 후)
                 GUI.Label(new Rect(cx - 20, body.y - 15, 40, 14), $"<size=11><color=#ffd76a>{StrategyMark(u.Strategy)}</color></size>", small);
             if (u.MoonShadow && (sprite == null || !sprite.FormArt))                     // 캐릭터를 덮는 눈 (월영 도트에는 눈이 있다)

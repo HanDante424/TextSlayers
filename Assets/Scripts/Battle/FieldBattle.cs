@@ -208,6 +208,7 @@ namespace TextSlayers
         public FxTheme Theme;
         public float LastHitTime = -99f;      // 피격 번쩍임 (화면)
         public int Ammo;                      // 총잡이 기본탄
+        public float LastBladeTime = -10f;    // 릭: 마지막으로 검을 휘두른 시각 (화면에서 권총을 감춘다)
         public float ReloadTimer;             // 장전 중 (기본탄 · 특수탄 불가)
         public bool LoadingSpecial;           // 지금 장전이 특수탄인가 (끝나도 기본탄은 채우지 않는다)
         public float LastShotTime = -10f;     // 마지막으로 총을 쏜 시각 (화면의 반동)
@@ -224,6 +225,8 @@ namespace TextSlayers
         public bool MoonShadowPassive;        // 요월 월영 장착
         public bool MoonShadow;               // 월영 상태 (악신의 눈)
         public int ShadowTrace;               // 그림자 흔적 (최대 15)
+        public bool Polearm;                  // 레일: 검 + 검집 결합 장병기 상태 (발동 조건 미정 → 지금은 디버그 키로만)
+        public float PolearmSince;            // 결합을 시작한 전투 시각
         public FieldSkillDef[] NormalSkills;  // 월영 전 장착 스킬 (웨이브 끝에 복구)
         public bool PushCollide;              // 밀려나는 중 충돌하면 기절
 
@@ -498,7 +501,7 @@ namespace TextSlayers
             Phase = FieldPhase.Running;
             Altar = 0f;
             EyeOpen = false;
-            foreach (var u in Players) { if (u.MoonShadow) EndMoonShadow(u); u.Marked = false; u.FollowUps.Clear(); u.ChannelTimer = 0f; CancelCast(u); u.SpecialAmmo = 0; u.ArrivalHit = null; u.Dashing = false; u.OffMapTimer = 0f; u.HeldTimer = 0f; u.Grabbed = null; u.GrabSkill = null; u.Reeled = null; u.Barrage = null; u.AirTimer = 0f; }
+            foreach (var u in Players) { if (u.MoonShadow) EndMoonShadow(u); u.Marked = false; u.FollowUps.Clear(); u.ChannelTimer = 0f; CancelCast(u); u.SpecialAmmo = 0; u.ArrivalHit = null; u.Dashing = false; u.OffMapTimer = 0f; u.HeldTimer = 0f; u.Grabbed = null; u.GrabSkill = null; u.Reeled = null; u.Barrage = null; u.AirTimer = 0f; u.Polearm = false; }
             Emit(FieldEventKind.Wave, null, null, index + 1, false, $"[{index + 1}/{WaveCount}] 적이 나타났다!");
         }
 
@@ -871,6 +874,27 @@ namespace TextSlayers
         public void DebugOpenEye() { if (HasAltar && !EyeOpen) OpenEye(); }
 
         public void DebugIgnite() { foreach (var u in Players) AddIgnite(u, IgniteMax); }
+
+        public const string RailId = "c10";
+        public const float RailCombineTime = 0.7f;   // 검과 검집을 결합하는 동작 시간 [임시]
+
+        /// <summary>디버그: 레일의 검 ↔ 결합 장병기 전환. 결합하는 동안은 다른 행동 · 이동을 하지 않는다 [해석].</summary>
+        public void DebugToggleRailForm()
+        {
+            foreach (var u in Players)
+            {
+                if (!u.Alive || u.Def == null || u.Def.Id != RailId) continue;
+                u.Polearm = !u.Polearm;
+                if (u.Polearm)
+                {
+                    u.PolearmSince = Time;
+                    CancelCast(u);
+                    u.ChannelTimer = Mathf.Max(u.ChannelTimer, RailCombineTime);
+                }
+                else u.ChannelTimer = 0f;
+                Emit(FieldEventKind.Info, u, null, 0, false, u.Polearm ? $"{u.Name} — 검과 검집을 결합" : $"{u.Name} — 결합 해제");
+            }
+        }
 
         void DashMove(FieldUnit u, float dt)
         {
@@ -1269,6 +1293,9 @@ namespace TextSlayers
                 return true;
             }
 
+            // 릭: 가까이에 적이 있으면 검 (장전 중에도 가능, 탄을 쓰지 않는다 [해석])
+            if (u.Def != null && u.Def.Id == RickId && TryRickSword(u)) return true;
+
             // 기본 공격 (월영: 하지 않음 · 장전 중: 불가)
             if (u.MoonShadow || u.ReloadTimer > 0f) return false;
             if (Vector2.Distance(u.Pos, target.Pos) > u.Range) return false;
@@ -1297,6 +1324,26 @@ namespace TextSlayers
                 if (--u.Ammo <= 0) { u.Ammo = 0; u.ReloadTimer = ReloadTime; u.LoadingSpecial = false; }
             }
             AddIgnite(u, IgniteBasic);
+            return true;
+        }
+
+        public const string RickId = "c12";
+
+        /// <summary>
+        /// 릭의 근거리 대응 (사용자 2026-11-28: 원거리는 권총, 근거리는 검).
+        /// 노리던 대상과 상관없이, 검이 닿는 거리의 가장 가까운 적을 벤다 [해석].
+        /// </summary>
+        bool TryRickSword(FieldUnit u)
+        {
+            var foe = NearestFoeWithin(u, FieldConst.RickSwordRange);
+            if (foe == null) return false;
+            Vector2 d = foe.Pos - u.Pos;
+            if (d.sqrMagnitude > 0.0001f) u.Facing = d.normalized;
+            Hit(u, foe, 1f, 0f, "공격", false);
+            Knockback(foe, d, FieldConst.RickSwordKnockLevel);
+            var e = AddEffect(FieldEffectKind.Swing, u, u.Pos + u.Facing * 0.7f, 1f, u.BasicColor);
+            if (e != null) { e.Count = (int)BasicKind.Sword; e.End = foe.Pos; }
+            u.LastBladeTime = Time;
             return true;
         }
 

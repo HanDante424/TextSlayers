@@ -88,7 +88,7 @@ namespace TextSlayers
             GUI.matrix = previousMatrix;
         }
 
-        // ───────── 근접 무기 내려베기 (사용자 2026-11-27: 모든 근거리 무기가 이 방식. 지금은 스티움 · 에른 · 메일 · 요월 · 라바다 · 레온하르트 · 사하라 · 가니악 · 모모로이) ─────────
+        // ───────── 근접 무기 내려베기 (사용자 2026-11-27: 모든 근거리 무기가 이 방식. 지금은 스티움 · 에른 · 메일 · 요월 · 라바다 · 레온하르트 · 사하라 · 가니악 · 모모로이 · 레일 · 베들렌 · 릭) ─────────
         // 머리 뒤에서 위로 넘겨 내려베고(-115° → +80°), 초승달 잔흔이 꼬리부터 흩어진다.
         // 값은 시트를 만든 값과 같아야 무기가 잔흔을 따라간다. 좌표는 발 위치 기준 도트, 오른쪽을 볼 때.
 
@@ -132,6 +132,19 @@ namespace TextSlayers
         // 휘두르기용 도트는 원본 닻을 머리가 오른쪽을 향하게 90도 돌린 것 (momoroi_anchor 는 세로 원본)
         static readonly CleaveStyle AnchorCleave = new CleaveStyle { Sheet = "cleaveMomoroi", CenterX = -22f, Radius = 88f, Wind = 0.04f, Sweep = 0.16f, WeaponTime = 0.51f, WeaponSprite = "momoroi_anchor_swing", GripY = 32f };
 
+        // 레일 루카스 검 (사용자 2026-11-28: 기본은 검만). 검이 짧아 반지름을 줄여 손 위치를 다른 무기와 맞춘다. 속도는 에른, 은 · 버건디 [임시]
+        // rail_sword 는 원본(칼끝 왼쪽 · 날 위)을 180도 돌려 칼끝 오른쪽 · 날 아래로 만들고, 칼끝이 x=59 가 되게 옮긴 것. 왼쪽을 볼 때는 위아래를 뒤집는다
+        static readonly CleaveStyle RailCleave = new CleaveStyle { Sheet = "cleaveRail", CenterX = -22f, Radius = 76f, Wind = 0.03f, Sweep = 0.11f, WeaponTime = 0.36f, WeaponSprite = "rail_sword", GripY = 32f, OneSided = true };
+
+        // 레일 결합 장병기 (사용자 2026-11-28): 크기 · 속도는 스티움, 도트 2배, 불타는 잔흔 [임시]. 도트는 GameView.RailFx.cs 참고
+        static readonly CleaveStyle RailPoleCleave = new CleaveStyle { Sheet = "cleaveRailPole", CenterX = -32f, Radius = 129f, Wind = 0.04f, Sweep = 0.16f, WeaponTime = 0.51f, WeaponSprite = RailPoleSprite, WeaponZoom = RailPoleZoom, GripY = RailGripY, OneSided = true };
+
+        // 베들렌 카트리지 중대검 (사용자 2026-11-28: 기본 공격): 크기는 에른, 속도는 스티움, 호는 두껍게, 구리 · 주황 [임시]. 왼쪽을 볼 때는 위아래를 뒤집는다
+        static readonly CleaveStyle BedlenCleave = new CleaveStyle { Sheet = "cleaveBedlen", CenterX = -22f, Radius = 88f, Wind = 0.04f, Sweep = 0.16f, WeaponTime = 0.51f, WeaponSprite = "bedlen_sword", GripY = 32f, OneSided = true };
+
+        // 릭 곡선 외날 장검 (사용자 2026-11-28: 근거리): 크기 · 속도는 에른, 호는 가늘게, 흑철 · 버건디 [임시]. 왼쪽을 볼 때는 위아래를 뒤집는다
+        static readonly CleaveStyle RickCleave = new CleaveStyle { Sheet = "cleaveRick", CenterX = -22f, Radius = 88f, Wind = 0.03f, Sweep = 0.11f, WeaponTime = 0.36f, WeaponSprite = "rick_sword", GripY = 31f, OneSided = true };
+
         // 파이어 슬래시 (사용자 2026-11-27): 기본 공격 동작에 화염 파티클을 아주 많이
         static readonly CleaveStyle FireSlashCleave = new CleaveStyle { Sheet = "fireSlash", CenterX = -22f, Radius = 104f, Wind = 0.03f, Sweep = 0.13f, WeaponTime = 0.45f, WeaponSprite = "ern_sword_flame" };   // [임시]
 
@@ -151,6 +164,9 @@ namespace TextSlayers
             if (weapon == Weapon.Anchor) return AnchorCleave;
             if (weapon != Weapon.OneHand) return null;
             if (IsSahara(e)) return SaharaCleave;
+            if (e.Source.Def.Id == FieldBattle.RickId) return RickCleave;
+            if (e.Source.Def.Id == "c11") return BedlenCleave;
+            if (e.Source.Def.Id == FieldBattle.RailId) return e.Source.Polearm ? RailPoleCleave : RailCleave;
             return e.Source.Def.Id == "c48" ? GaniakCleave : ErnCleave;
         }
 
