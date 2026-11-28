@@ -229,6 +229,9 @@ namespace TextSlayers
         public const float FlankWaypointDist = 1.5f;
         public const float FlankCloseX = 2f;           // 목표와 x 가 이 안으로 들어오면 우회 종료
         public const float ApproachRatio = 0.9f;       // 사거리의 이 비율까지 접근
+        public const float RickPistolRange = 7f;       // 릭: 권총 사거리 [임시]
+        public const float RickSwordRange = 1.8f;      // 릭: 이 거리 안에 적이 있으면 검을 쓴다 [임시]
+        public const int RickSwordKnockLevel = 1;      // 릭: 검의 넉백 단계 (권총은 0) [임시]
         public const float PlayerStartX = 2f;
         public const float PlayerStartStagger = 1f;    // 아군 시작 위치: 한 명씩 번갈아 앞으로 나오는 거리
         public const float EnemyStartX = 18f;
@@ -358,10 +361,14 @@ namespace TextSlayers
             ExteriorOnly(T("c07", "모모로이 세이린", "탱커, 서포터", Role.Tank, Strategy.Charge, Tpl.Tank)),
             // 투견: 외형 · 기본 공격만 확인 (사용자 2026-11-28). 스탯은 근거리 딜탱 틀 [임시]
             ExteriorOnly(T("c08", "투견", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser)),
-            T("c09", "마리스 레지나", "암살자", Role.Dealer, Strategy.Flank, Tpl.Assassin),
-            T("c10", "레일 루카스", "근거리 딜러", Role.Dealer, Strategy.Flank, Tpl.Melee),
-            T("c11", "베들렌 메릴", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser),
-            T("c12", "릭 엔더빌", "근거리 딜러", Role.Dealer, Strategy.Flank, Tpl.Melee),
+            // 마리스 레지나: 외형 · 기본 공격만 확인 (사용자 2026-11-28). 스탯은 암살자 틀 [임시]
+            ExteriorOnly(T("c09", "마리스 레지나", "암살자", Role.Dealer, Strategy.Flank, Tpl.Assassin)),
+            // 레일 루카스: 외형 · 기본 공격(검만) 확인 (사용자 2026-11-28). 스탯은 근거리 딜러 틀 [임시]
+            ExteriorOnly(T("c10", "레일 루카스", "근거리 딜러", Role.Dealer, Strategy.Flank, Tpl.Melee)),
+            // 베들렌 메릴: 외형 · 중대검 기본 공격만 확인 (사용자 2026-11-28). 건틀릿은 스킬에서 쓸 예정. 스탯은 근거리 딜탱 틀 [임시]
+            ExteriorOnly(T("c11", "베들렌 메릴", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser)),
+            // 릭 엔더빌: 원거리는 권총, 근거리는 검 (사용자 2026-11-28). 스킬 없음. 스탯은 근거리 딜러 틀 [임시], 기본 전술 도주 · 견제 [해석]
+            WithRange(ExteriorOnly(T("c12", "릭 엔더빌", "근거리 딜러", Role.Dealer, Strategy.Kite, Tpl.Melee)), FieldConst.RickPistolRange),
             T("c13", "아그니", "근거리 딜러", Role.Dealer, Strategy.Charge, Tpl.Melee, new[] { "agni_kick", "agni_flurry", "agni_rising", "agni_meteor", "agni_crusher", "agni_knee" }),
             T("c14", "노와", "암살자", Role.Dealer, Strategy.Flank, Tpl.Assassin),
             T("c15", "슈진 잔엔", "근거리 딜러", Role.Dealer, Strategy.Charge, Tpl.Melee),
@@ -418,6 +425,12 @@ namespace TextSlayers
             c.Skills = new string[0];
             c.Passive = null;
             c.Enabled = true;
+            return c;
+        }
+
+        static CharacterDef WithRange(CharacterDef c, float range)
+        {
+            c.Range = range;
             return c;
         }
 

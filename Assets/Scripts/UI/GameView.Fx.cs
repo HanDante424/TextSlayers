@@ -603,6 +603,8 @@ namespace TextSlayers
                         DrawChain(hand, bite, U, SkillColor.Steel, Light(SkillColor.Steel), 1f);
                 }
 
+            DrawRailForms(b, unit, P);
+
             // 투사체 (모양: 아치 · 구체 · 탄환 · 화살 · 부적 · 얼음 조각 · 포션)
             foreach (var p in b.Projectiles)
             {
@@ -762,6 +764,9 @@ namespace TextSlayers
                 case "stium":
                 case "c38": return Weapon.GreatSword;   // 레온하르트: 사자왕의 석대검 (사용자 2026-11-27)
                 case "ern":                 // 에른
+                case "c10":                 // 레일 루카스
+                case "c11":                 // 베들렌 메릴 (중대검)
+                case "c12":                 // 릭 (검으로 벨 때)
                 case "c41":                 // 사하라
                 case "c48": return Weapon.OneHand;   // 가니악
                 case "c06": return Weapon.Halberd;   // 메일
@@ -1010,6 +1015,7 @@ namespace TextSlayers
                     if (u.FireArm && Chance(dt * 45f)) Emit(FxTheme.Fire, SkillColor.Fire, pos + Jitter(unit * 0.4f), unit, 0.6f);
                     if (u.Glutton && Chance(dt * 25f)) Emit(FxTheme.Gray, SkillColor.Gray, pos + Jitter(unit * 0.4f), unit, 0.5f);
                     if (u.MoonShadow && Chance(dt * 30f)) Emit(FxTheme.Shadow, SkillColor.Shadow, pos + Jitter(unit * 0.4f), unit, 0.5f);
+                    if (RailPoleReady(u, b.Time) && Chance(dt * 22f)) Emit(FxTheme.Fire, SkillColor.Fire, pos + new Vector2(u.Facing.x < 0f ? -unit * 0.5f : unit * 0.5f, -unit * 0.9f) + Jitter(unit * 0.3f), unit, 0.4f);
                     if (u.Theme == FxTheme.Fire && !u.FireArm && Chance(dt * 6f)) Emit(FxTheme.Fire, SkillColor.Fire, pos + Jitter(unit * 0.3f), unit, 0.3f);
                 }
                 foreach (var u in b.Enemies)

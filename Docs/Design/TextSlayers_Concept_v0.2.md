@@ -707,6 +707,10 @@ v0.1 의 7종에서 **MP 를 쓰지 않고**(`[해석]` 쿨다운으로 대체) 
 | 가니악 | [Ganiak_PixelLab_64.png](Ganiak_PixelLab_64.png) |
 | 모모로이 세이린 (외형 · 기본 공격만 출전) | [Momoroi_Seirin_PixelLab_64.png](Momoroi_Seirin_PixelLab_64.png) |
 | 투견 (외형 · 기본 공격만 출전) | [Tugyeon_PixelLab_64.png](Tugyeon_PixelLab_64.png) |
+| 마리스 레지나 (외형 · 기본 공격만 출전) | [Maris_Regina_PixelLab_64.png](Maris_Regina_PixelLab_64.png) |
+| 레일 루카스 (외형 · 검 기본 공격만 출전) | [Rail_Lucas_PixelLab_64.png](Rail_Lucas_PixelLab_64.png) |
+| 베들렌 메릴 (외형 · 중대검 기본 공격만 출전) | [Bedlen_Merill_PixelLab_64.png](Bedlen_Merill_PixelLab_64.png) |
+| 릭 엔더빌 (외형 · 권총 · 검 기본 공격만 출전) | [Rick_Enderville_PixelLab_64.png](Rick_Enderville_PixelLab_64.png) |
 
 | 항목 | 제작 기준 |
 |---|---|

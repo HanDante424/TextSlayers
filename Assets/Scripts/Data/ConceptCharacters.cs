@@ -33,6 +33,10 @@ namespace TextSlayers
             S("c06", 2, BasicKind.Halberd, SkillColor.Spirit, FxTheme.Spirit, "mail_one_hundred", "mail_spirit", "mail_all_in"),
             S("c07", 1, BasicKind.Anchor, SkillColor.Steel, FxTheme.Steel),   // 모모로이: 패시브 미정. 넉백은 근거리 기본값 [임시]
             S("c08", 1, BasicKind.Fist, SkillColor.Steel, FxTheme.Steel),      // 투견: 패시브 미정. 주먹 · 넉백은 근거리 기본값 [임시]
+            S("c09", 1, BasicKind.Fist, new Color(0.72f, 0.14f, 0.2f), FxTheme.Steel),   // 마리스 레지나: 패시브 미정. 주먹 · 넉백은 근거리 기본값, 어두운 붉은색 [임시]
+            S("c10", 1, BasicKind.Sword, SkillColor.Steel, FxTheme.Steel),   // 레일 루카스: 패시브 미정. 넉백은 근거리 기본값 [임시]
+            S("c11", 1, BasicKind.GreatSword, new Color(1f, 0.58f, 0.18f), FxTheme.Steel),   // 베들렌: 패시브 미정. 중대검 · 넉백은 근거리 기본값 [임시]
+            S("c12", 0, BasicKind.Pistol, SkillColor.Steel, FxTheme.Steel),   // 릭: 패시브 미정. 권총 넉백 0, 검은 FieldConst.RickSwordKnockLevel [임시]
             S("c13", 1, BasicKind.Fist, SkillColor.Fire, FxTheme.Fire, "agni_giant", "agni_cycle", "agni_burn"),
             S("c19", 1, BasicKind.Katana, SkillColor.Moon, FxTheme.Moon, "yw_bright_moon", "yw_moon_cut", "yw_moon_shadow"),
             S("c32", 2, BasicKind.Cross, SkillColor.Holy, FxTheme.Holy, "lv_divine", "lv_radiance", "lv_overwhelm"),
