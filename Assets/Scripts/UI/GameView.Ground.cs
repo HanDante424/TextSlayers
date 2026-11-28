@@ -40,14 +40,14 @@ namespace TextSlayers
             => Mathf.PerlinNoise(seed * 0.137f + x * GrassNoiseScale, seed * 0.071f + y * GrassNoiseScale) > GrassThreshold;
 
         /// <summary>필드 바닥을 그린다. 타일이 없으면 false (기존 단색).</summary>
-        static bool DrawGround(Rect field, float unit, FieldBattle b)
+        static bool DrawGround(Rect field, float unit, FieldStageDef stage)
         {
             var texture = GroundTexture();
             if (texture == null) return false;
             if (Event.current.type != EventType.Repaint) return true;
 
             int seed = 0;
-            foreach (char c in b.Stage.Id) seed = (seed * 31 + c) % 997;
+            foreach (char c in stage.Id) seed = (seed * 31 + c) % 997;
             float size = GroundTile * FieldPixelSize(unit);
             int columns = Mathf.CeilToInt(field.width / size), rows = Mathf.CeilToInt(field.height / size);
 
