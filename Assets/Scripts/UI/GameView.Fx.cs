@@ -748,7 +748,7 @@ namespace TextSlayers
         }
 
         // ── 무기를 직접 휘두르는 기본 공격 (사용자 2026-11-27) ──
-        enum Weapon { None, GreatSword, OneHand, Halberd, Katana, Cross }
+        enum Weapon { None, GreatSword, OneHand, Halberd, Katana, Cross, Anchor }
 
         const float WeaponScale = 0.65f;   // 무기 크기 배율 (사용자 2026-11-27: 너무 크다 → 1.0 에서 줄임) [임시]
         static readonly Color SteelBlade = new Color(0.82f, 0.84f, 0.92f);
@@ -765,6 +765,7 @@ namespace TextSlayers
                 case "c41":                 // 사하라
                 case "c48": return Weapon.OneHand;   // 가니악
                 case "c06": return Weapon.Halberd;   // 메일
+                case "c07": return Weapon.Anchor;    // 모모로이
                 case "c19": return Weapon.Katana;    // 요월
                 case "c32": return Weapon.Cross;     // 라바다
                 default: return Weapon.None;

@@ -256,9 +256,10 @@ namespace TextSlayers
             {
                 var slot = Loadout(id);
                 if (slot.Passive == ConceptCharacters.GluttonPassive) continue;
-                if (slot.Skills.Length != FieldData.MaxEquipActives)
+                int need = Mathf.Min(FieldData.MaxEquipActives, slot.Def.Skills.Length);   // 스킬 미정 캐릭터는 0개
+                if (slot.Skills.Length != need)
                 {
-                    problem = $"{slot.Def.Name}: 액티브 {FieldData.MaxEquipActives}개를 골라 주세요 ({slot.Skills.Length}/{FieldData.MaxEquipActives})";
+                    problem = $"{slot.Def.Name}: 액티브 {need}개를 골라 주세요 ({slot.Skills.Length}/{need})";
                     return false;
                 }
             }

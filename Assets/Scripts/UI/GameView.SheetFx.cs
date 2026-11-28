@@ -88,7 +88,7 @@ namespace TextSlayers
             GUI.matrix = previousMatrix;
         }
 
-        // ───────── 근접 무기 내려베기 (사용자 2026-11-27: 모든 근거리 무기가 이 방식. 지금은 스티움 · 에른 · 메일 · 요월 · 라바다 · 레온하르트 · 사하라 · 가니악) ─────────
+        // ───────── 근접 무기 내려베기 (사용자 2026-11-27: 모든 근거리 무기가 이 방식. 지금은 스티움 · 에른 · 메일 · 요월 · 라바다 · 레온하르트 · 사하라 · 가니악 · 모모로이) ─────────
         // 머리 뒤에서 위로 넘겨 내려베고(-115° → +80°), 초승달 잔흔이 꼬리부터 흩어진다.
         // 값은 시트를 만든 값과 같아야 무기가 잔흔을 따라간다. 좌표는 발 위치 기준 도트, 오른쪽을 볼 때.
 
@@ -128,6 +128,10 @@ namespace TextSlayers
         // 가니악 흑강 장검 (사용자 2026-11-27): 크기 · 속도는 에른, 심연 진홍 [임시]. 좌우 대칭이라 뒤집지 않는다
         static readonly CleaveStyle GaniakCleave = new CleaveStyle { Sheet = "cleaveGaniak", CenterX = -22f, Radius = 88f, Wind = 0.03f, Sweep = 0.11f, WeaponTime = 0.36f, WeaponSprite = "ganiak_sword", GripY = 32f };
 
+        // 모모로이 대형 닻 (사용자 2026-11-28): 크기는 에른, 속도는 스티움, 호는 두껍게, 남색 → 흰색 [임시]. 좌우 대칭이라 뒤집지 않는다
+        // 휘두르기용 도트는 원본 닻을 머리가 오른쪽을 향하게 90도 돌린 것 (momoroi_anchor 는 세로 원본)
+        static readonly CleaveStyle AnchorCleave = new CleaveStyle { Sheet = "cleaveMomoroi", CenterX = -22f, Radius = 88f, Wind = 0.04f, Sweep = 0.16f, WeaponTime = 0.51f, WeaponSprite = "momoroi_anchor_swing", GripY = 32f };
+
         // 파이어 슬래시 (사용자 2026-11-27): 기본 공격 동작에 화염 파티클을 아주 많이
         static readonly CleaveStyle FireSlashCleave = new CleaveStyle { Sheet = "fireSlash", CenterX = -22f, Radius = 104f, Wind = 0.03f, Sweep = 0.13f, WeaponTime = 0.45f, WeaponSprite = "ern_sword_flame" };   // [임시]
 
@@ -144,6 +148,7 @@ namespace TextSlayers
             if (weapon == Weapon.Halberd) return MailCleave;
             if (weapon == Weapon.Katana) return YowolCleave;
             if (weapon == Weapon.Cross) return LavadaCleave;
+            if (weapon == Weapon.Anchor) return AnchorCleave;
             if (weapon != Weapon.OneHand) return null;
             if (IsSahara(e)) return SaharaCleave;
             return e.Source.Def.Id == "c48" ? GaniakCleave : ErnCleave;

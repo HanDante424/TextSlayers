@@ -147,9 +147,11 @@ namespace TextSlayers
             y += LoadoutRowH;
 
             // 액티브 3 (6 중). 글러트니면 식 3종으로 고정
-            string head = glutton ? "<size=17>액티브 (고정)</size>" : $"<size=17>액티브 {slot.Skills.Length}/{FieldData.MaxEquipActives}</size>";
+            string head = glutton ? "<size=17>액티브 (고정)</size>" : $"<size=17>액티브 {slot.Skills.Length}/{Mathf.Min(FieldData.MaxEquipActives, c.Skills.Length)}</size>";
             GUI.Label(new Rect(x, y, LoadoutLabelW, LoadoutRowH), head, label);
             var list = glutton ? ConceptCharacters.GluttonSkills : c.Skills;
+            if (list.Length == 0)
+                GUI.Label(new Rect(x + LoadoutLabelW, y, w - LoadoutLabelW, LoadoutRowH), "<size=17><color=#999999>스킬 · 패시브 미정 — 기본 공격만 사용</color></size>", label);
             bw = (w - LoadoutLabelW) / Mathf.Max(1, list.Length);
             for (int i = 0; i < list.Length; i++)
             {

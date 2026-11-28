@@ -31,6 +31,8 @@ namespace TextSlayers
             S("vendetta", 1, BasicKind.Pistol, SkillColor.Steel, FxTheme.Steel, "vd_aim", "vd_case_ready", "vd_ap_round"),
             S("paracelsus", 0, BasicKind.Potion, SkillColor.Potion, FxTheme.Potion, "pc_stone", "pc_mass", "pc_magnum"),
             S("c06", 2, BasicKind.Halberd, SkillColor.Spirit, FxTheme.Spirit, "mail_one_hundred", "mail_spirit", "mail_all_in"),
+            S("c07", 1, BasicKind.Anchor, SkillColor.Steel, FxTheme.Steel),   // 모모로이: 패시브 미정. 넉백은 근거리 기본값 [임시]
+            S("c08", 1, BasicKind.Fist, SkillColor.Steel, FxTheme.Steel),      // 투견: 패시브 미정. 주먹 · 넉백은 근거리 기본값 [임시]
             S("c13", 1, BasicKind.Fist, SkillColor.Fire, FxTheme.Fire, "agni_giant", "agni_cycle", "agni_burn"),
             S("c19", 1, BasicKind.Katana, SkillColor.Moon, FxTheme.Moon, "yw_bright_moon", "yw_moon_cut", "yw_moon_shadow"),
             S("c32", 2, BasicKind.Cross, SkillColor.Holy, FxTheme.Holy, "lv_divine", "lv_radiance", "lv_overwhelm"),
@@ -83,7 +85,7 @@ namespace TextSlayers
                     c.BasicColor = st.Color;
                     c.Theme = st.Theme;
                     c.Passives = st.Passives;
-                    c.Passive = st.Passives[0];
+                    c.Passive = st.Passives.Length > 0 ? st.Passives[0] : null;   // 패시브 미정 캐릭터는 없음
                     c.BasicKnock = st.Knock;
                 }
                 c.Wolf = System.Array.IndexOf(Wolves, c.Id) >= 0;

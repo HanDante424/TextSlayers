@@ -11,7 +11,7 @@ namespace TextSlayers
 
     /// <summary>기본 공격 모양 (사용자 2026-11-26). 근거리는 휘두르기 이펙트, 원거리는 투사체.</summary>
     public enum BasicKind { Sword, GreatSword, Halberd, Katana, Fist, Claw, Cross, FireSword, DarkSword, Glutton, IceShard, Pistol, Potion, DarkOrb,
-                            HSlash, Bolt, None }   // HSlash = 횡베기 (근접 더미), Bolt = 파티클 탄 (원거리 더미), None = 이펙트 없음
+                            HSlash, Bolt, None, Anchor }   // HSlash = 횡베기 (근접 더미), Bolt = 파티클 탄 (원거리 더미), None = 이펙트 없음, Anchor = 대형 닻 (모모로이)
 
     /// <summary>캐릭터 파티클 테마 (스킬 · 기본 공격 이펙트에 섞이는 입자).</summary>
     public enum FxTheme { None, Fire, Dark, Moon, Holy, Ice, Frost, Spirit, Potion, Talisman, Gold, Steel, Black, Shadow, Gray }
@@ -354,8 +354,10 @@ namespace TextSlayers
             // 나머지 43명: 이름 · 유형 · 기본 역할 · 기본 전략은 기획서 5장 표 그대로.
             // 스탯 · 스킬은 첫 번째 유형의 틀(Template)로 채운 자리 표시 [임시] — 고유 스킬 구현 전 구조 테스트용.
             T("c06", "메일 보레아", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser, new[] { "mail_shoulder", "mail_stomp", "mail_smash", "mail_harden", "mail_slash_blast", "mail_overdrive" }),
-            T("c07", "모모로이 세이린", "탱커, 서포터", Role.Tank, Strategy.Charge, Tpl.Tank),
-            T("c08", "투견", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser),
+            // 모모로이: 외형 · 기본 공격만 확인 (사용자 2026-11-28). 스킬 · 패시브는 컨셉을 받으면 채운다. 스탯은 탱커 틀 [임시]
+            ExteriorOnly(T("c07", "모모로이 세이린", "탱커, 서포터", Role.Tank, Strategy.Charge, Tpl.Tank)),
+            // 투견: 외형 · 기본 공격만 확인 (사용자 2026-11-28). 스탯은 근거리 딜탱 틀 [임시]
+            ExteriorOnly(T("c08", "투견", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser)),
             T("c09", "마리스 레지나", "암살자", Role.Dealer, Strategy.Flank, Tpl.Assassin),
             T("c10", "레일 루카스", "근거리 딜러", Role.Dealer, Strategy.Flank, Tpl.Melee),
             T("c11", "베들렌 메릴", "근거리 딜탱", Role.Dealer, Strategy.Charge, Tpl.Bruiser),
@@ -407,6 +409,15 @@ namespace TextSlayers
         {
             var c = T0(id, name, kind, role, strategy, tpl);
             if (concept != null) { c.Skills = concept; c.Enabled = true; }
+            return c;
+        }
+
+        /// <summary>스킬 컨셉 전에 외형 · 기본 공격만 보는 출전: 액티브 · 패시브 없음 (틀에서 채운 자리 표시도 비운다).</summary>
+        static CharacterDef ExteriorOnly(CharacterDef c)
+        {
+            c.Skills = new string[0];
+            c.Passive = null;
+            c.Enabled = true;
             return c;
         }
 
